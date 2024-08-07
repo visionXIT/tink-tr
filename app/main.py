@@ -255,7 +255,7 @@ async def main(request: Request):
     for i in range(len(orders.operations)):
         oper = orders.operations[i]
         if oper.type == "Покупка ценных бумаг" or oper.type == "Продажа ценных бумаг":
-            print(oper.date, oper.quantity)
+            # print(oper.date, oper.quantity)
             if oper.quantity == q_limit or oper.quantity == q_limit * 2 or (get_last_q(i) and get_last_q(i) / 2 + q_limit == oper.quantity):
                 opers.append(oper)
         elif oper.type == "Списание вариационной маржи" or oper.type == "Зачисление вариационной маржи":
