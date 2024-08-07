@@ -239,15 +239,23 @@ async def main(request: Request):
     orders = await client.get_operations(account_id=settings.account_id, 
                                          from_=datetime.datetime.now() - datetime.timedelta(days=num_trades),
                                          to=datetime.datetime.now())
-
     trades, inc = calc_trades(copy.copy(orders.operations))
     trades.reverse()
     orders.operations.reverse()
     opers = []
+    
+    def get_last_q():
+        nonlocal opers
+        
+        for i in range(len(opers) - 1, -1, -1):
+            if opers[i].type in ["Покупка ценных бумаг", "Продажа ценных бумаг"]:
+                return opers[i].quantity
+            
+    
     for i in range(len(orders.operations)):
         oper = orders.operations[i]
         if oper.type == "Покупка ценных бумаг" or oper.type == "Продажа ценных бумаг":
-            if oper.quantity == q_limit or oper.quantity == q_limit * 2:
+            if oper.quantity == q_limit or oper.quantity == q_limit * 2 or (get_last_q() and get_last_q() / 2 + q_limit == oper.quantity):
                 opers.append(oper)
         elif oper.type == "Списание вариационной маржи" or oper.type == "Зачисление вариационной маржи":
             opers.append(oper)
