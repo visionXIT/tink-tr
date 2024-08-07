@@ -53,7 +53,7 @@ figi = KOT["NGQ4"]
 figi_name = "NGQ4"
 ii = None
 
-q_limit = 4
+q_limit = 1
 
 templates = Jinja2Templates(directory='templates')
 num_trades = 2
@@ -244,18 +244,19 @@ async def main(request: Request):
     orders.operations.reverse()
     opers = []
     
-    def get_last_q():
+    def get_last_q(j):
         nonlocal opers
         
-        for i in range(len(opers) - 1, -1, -1):
-            if opers[i].type in ["Покупка ценных бумаг", "Продажа ценных бумаг"]:
-                return opers[i].quantity
+        for i in range(j - 1, -1, -1):
+            if orders.operations[i].type in ["Покупка ценных бумаг", "Продажа ценных бумаг"]:
+                return orders.operations[i].quantity
             
     
     for i in range(len(orders.operations)):
         oper = orders.operations[i]
         if oper.type == "Покупка ценных бумаг" or oper.type == "Продажа ценных бумаг":
-            if oper.quantity == q_limit or oper.quantity == q_limit * 2 or (get_last_q() and get_last_q() / 2 + q_limit == oper.quantity):
+            print(oper.date, oper.quantity)
+            if oper.quantity == q_limit or oper.quantity == q_limit * 2 or (get_last_q(i) and get_last_q(i) / 2 + q_limit == oper.quantity):
                 opers.append(oper)
         elif oper.type == "Списание вариационной маржи" or oper.type == "Зачисление вариационной маржи":
             opers.append(oper)
