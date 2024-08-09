@@ -269,7 +269,7 @@ async def main(request: Request):
                 inc += quotation_to_float(oper.payment)
 
     last = get_last_q(len(orders.operations))
-    if last.type == "Продажа ценных бумаг":
+    if last.type == "Покупка ценных бумаг":
         inc -= quotation_to_float(last.payment)
     
     opers.reverse()
