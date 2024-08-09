@@ -226,7 +226,7 @@ async def break_waiting():
 
 @app.get("/", response_class=HTMLResponse)
 async def main(request: Request):
-    global ii, found_tickers
+    global i, found_tickers
     
     logger.info("main query")
     
@@ -249,20 +249,30 @@ async def main(request: Request):
         
         for i in range(j - 1, -1, -1):
             if orders.operations[i].type in ["Покупка ценных бумаг", "Продажа ценных бумаг"]:
-                return orders.operations[i].quantity
+                return orders.operations[i]
             
-    
+    inc = 0
     for i in range(len(orders.operations)):
         oper = orders.operations[i]
         if oper.type == "Покупка ценных бумаг" or oper.type == "Продажа ценных бумаг":
             # print(oper.date, oper.quantity)
-            if oper.quantity == q_limit or oper.quantity == q_limit * 2 or (get_last_q(i) and get_last_q(i) / 2 + q_limit == oper.quantity):
+            if oper.quantity == q_limit or oper.quantity == q_limit * 2 or (get_last_q(i) and get_last_q(i).quantity / 2 + q_limit == oper.quantity):
                 opers.append(oper)
+                inc += quotation_to_float(oper.payment)
         elif oper.type == "Списание вариационной маржи" or oper.type == "Зачисление вариационной маржи":
             opers.append(oper)
+            inc += quotation_to_float(oper.payment)
+
         elif oper.type == "Удержание комиссии за операцию":
             if len(opers) > 0 and orders.operations[i - 1].id == opers[-1].id and opers[-1].quantity in [q_limit, q_limit * 2]:
                 opers.append(oper)
+                inc += quotation_to_float(oper.payment)
+        print(inc, oper.date)
+
+    last = get_last_q(len(orders.operations))
+    if last.type == "Продажа ценных бумаг":
+        inc -= quotation_to_float(last.payment)
+    
     opers.reverse()
     orders.operations = opers
     context = {
@@ -323,11 +333,11 @@ def calc_trades(trades):
         
     for i in trades:
         if i.type == "Покупка ценных бумаг" and i.quantity == q_limit * 2:
-            if prev != None and prev.figi == i.figi:
+            if prev != None and prev.figi == i.figi and prev.type == "Продажа ценных бумаг" :
                 add_mark(prev, i, "Short")
             prev = i
         elif i.type == "Продажа ценных бумаг" and i.quantity == q_limit * 2:
-            if prev != None and prev.figi == i.figi:
+            if prev != None and prev.figi == i.figi  and prev.type == "Покупка ценных бумаг" :
                 add_mark(prev, i, "Long")
             prev = i
         elif i.type == "Удержание комиссии за операцию" or i.type == "Списание вариационной маржи" or i.type == "Зачисление вариационной маржи":
