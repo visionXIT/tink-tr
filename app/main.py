@@ -267,7 +267,6 @@ async def main(request: Request):
             if len(opers) > 0 and orders.operations[i - 1].id == opers[-1].id and opers[-1].quantity in [q_limit, q_limit * 2]:
                 opers.append(oper)
                 inc += quotation_to_float(oper.payment)
-        print(inc, oper.date)
 
     last = get_last_q(len(orders.operations))
     if last.type == "Продажа ценных бумаг":
