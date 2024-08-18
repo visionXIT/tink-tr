@@ -57,7 +57,7 @@ q_limit = 1
 auth = None
 
 templates = Jinja2Templates(directory='templates')
-num_trades = 2
+num_trades = 3
 add_ticker = None
 found_tickers = None
 selected_type = None
