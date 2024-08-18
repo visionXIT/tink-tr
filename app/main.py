@@ -5,7 +5,7 @@ import logging
 from typing import Annotated, Any
 from uuid import uuid4
 
-from fastapi import Body, FastAPI, Form, Request
+from fastapi import Body, FastAPI, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -54,6 +54,7 @@ figi_name = "NGQ4"
 ii = None
 
 q_limit = 1
+auth = None
 
 templates = Jinja2Templates(directory='templates')
 num_trades = 2
@@ -238,7 +239,7 @@ async def break_waiting():
 
 @app.get("/", response_class=HTMLResponse)
 async def main(request: Request):
-    global i, found_tickers
+    global i, found_tickers, auth
 
     logger.info("main query")
 
@@ -255,6 +256,12 @@ async def main(request: Request):
     trades.reverse()
     orders.operations.reverse()
     opers = []
+    print(request.cookies)
+
+    if request.cookies.get("pass"):
+        auth = True
+    else:
+        auth = False
 
     def get_last_q(j):
         nonlocal opers
@@ -314,7 +321,8 @@ async def main(request: Request):
         "add_ticker": add_ticker,
         "found_tickers": found_tickers,
         "selected_type": selected_type,
-        "unsuccessful_trade": unsuccessful_trade
+        "unsuccessful_trade": unsuccessful_trade,
+        "auth": auth
     }
     if not found_tickers or len(found_tickers) < 2:
         found_tickers = None
@@ -361,10 +369,17 @@ def calc_trades(trades):
     return res, inc
 
 
+@app.post("/pass")
+async def passs(s: Annotated[str, Form()], response: Response):
+    res = RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+    if settings.password == s:
+        res.set_cookie(key="pass", value=True)
+    return res
+
+
 @app.post("/change_num_trades")
 async def change_num_trade(num: Annotated[int, Form()]):
     global num_trades
-    print(num)
     num_trades = num
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 

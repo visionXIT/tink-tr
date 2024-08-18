@@ -58,204 +58,216 @@
   
 </head>
 <body class="base">
-  <div class="modal hidden" id="modal">
-    {% if found_tickers and f.len(found_tickers) == 1 %}
-    Успешно добавлено 
-    <br>
-    Тикер: {{ found_tickers[0].ticker }}
-    <br>
-    Название: {{ found_tickers[0].name }}
-    {% endif %}
-  </div>
-  <div class="elem">
-    {% if (bot_working) %}
-    <h1>Бот работает</h1>
-    {% else %}
-    <h1>Бот не работает</h1>
-    {% endif %}
-      <form action="/change" method="post">
-        <button type="submit">
-          Выключить/Включить
-        </button>
-      </form>
-    <div class="block">
-      <form action="/change_q" method="post">
-        <label for="q">Лот: </label>
-        <input type="text" value="{{q_limit}}" name="q">
-        <button type="submit">
-          Изменить лот
-        </button>
-      </form>
-    </div>
-    
-    <form action="/change_k" method="post">
-      Торгует: 
-      <select name="k">
-        {% for i in figis.keys() %}
-          <option value="{{figis.get(i)}}"
-          {% if i == figi_name %}
-          selected
-          {%endif%}
-          >{{i}}</option>
-        {% endfor %}
-      </select>
-      <button type="submit">Установить</button>
-    </form>
-    <h3>Добавить новую котироку</h3>
-    <form action="/add_k" method="post" id="add_k">
-      <label for="ticker">Тикер: </label>
-      <input type="text" name="ticker" id="add_k__ticker" value="{{ add_ticker if add_ticker }}">
-      <br>
-      <label for="type">Тип инструмента</label>
-      <select name="type">
-        <option value="share"
-          {% if selected_type == "share" %}
-          selected
-          {% endif %}
-        >Акция</option>
-        <option value="futures"
-          {% if selected_type == "futures" %}
-          selected
-          {% endif %}
-        >Фьючерс</option>
-      </select>
-      <button type="submit">Добавить</button>
-    </form>
-    <br>
-    {% if found_tickers and f.len(found_tickers) > 1 %}
-      <form action="/exit_add_k" method="post">
-        <button id="add_k_close">Завершить поиск</button>
-      </form>
-    {% endif %}
-    <div class="block" id="add_k_result">
-      {% if found_tickers and f.len(found_tickers) > 1 %}
-        {% if f.len(found_tickers) > 7 %}
-        Результатов слишком много, укажите конкретнее
-        {% endif %}
-        {% for i in found_tickers %}
-          <br>
-          <h4>Тикер: {{ i.ticker }}</h4>
-          <h4>Название: {{ i.name }}</h4>
+  {% if not auth %}
 
-          <h4>Тип: 
-            {% if i.instrument_type == "futures" %}
-            Фьючерс
-            {% elif i.instrument_type == "share" %}
-            Акция
-            {% else %}
-            {{ i.instrument_type }}
-            {% endif %}
-          </h4>
-        {% endfor %}
+    <form action="/pass" method="post">
+      <label for="s">Пароль</label>
+      <input type="text" name="s">
+      <button type="submit">Войти</button>
+    </form>
+  {% endif %}
+  {% if auth %}
+    <div class="modal hidden" id="modal">
+      {% if found_tickers and f.len(found_tickers) == 1 %}
+      Успешно добавлено 
+      <br>
+      Тикер: {{ found_tickers[0].ticker }}
+      <br>
+      Название: {{ found_tickers[0].name }}
       {% endif %}
     </div>
-    <h2>Бот заработал: {{ f.round(result, 2) }}</h2>
-    <h1>Портфель:</h1>
-    -----------
-    <br>
-    <h1>Сумма: {{ f.round(q2f(portfolio.total_amount_shares) + q2f(portfolio.total_amount_currencies))}} руб</h1>
-    <h2>Акций на {{q2f(portfolio.total_amount_shares)}} {{ portfolio.total_amount_shares.currency }}</h2>
-    <h2>Валюты на {{q2f(portfolio.total_amount_currencies)}} {{ portfolio.total_amount_shares.currency }}</h2>
-    <h2>Фьючерсов на {{q2f(portfolio.total_amount_futures)}} {{ portfolio.total_amount_shares.currency }}</h2>
-    ------------
-    <br>
-    <h2>Позиции портфеля: </h2>
-    {%for i in portfolio.positions%}
-      =====================
-      <br>
-      <h3>
-        {% if figis2.get(i.figi) %}
-          Позиция: {{ figis2.get(i.figi) }}
-        {% else %}
-          FIGI: {{ i.figi }}
-        {% endif %}
-      </h3>
-        {% if i.instrument_type == "currency" %}
-        <h3>Тип: валюта</h3>
-      {% elif i.instrument_type == "share" %}
-        <h3>Тип: акция</h3>
-      {% elif i.instrument_type == "futures" %}
-        <h3>Тип: фьючерс</h3>
-      {% endif %}
-      {% if i.instrument_type == "currency" %}
-      <h3>Сумма: {{ f.round(q2f(i.quantity), 2) }} </h3>
+    <div class="elem">
+      
+      {% if (bot_working) %}
+      <h1>Бот работает</h1>
       {% else %}
-      <h3>Сумма: {{ f.round(q2f(i.quantity) * q2f(i.current_price),2) }} {{ i.current_price.currency }}</h3>
+      <h1>Бот не работает</h1>
       {% endif %}
-    {%endfor%}
-  </div>
-
-  <div class="elem">
-    {% if f.len(trades) == 0 %}
-    <h3>Нет завершенных сделок</h3>
-    {% endif %}
-    {% for trade in trades %}
-      <div class="trade block">
-        № {{ trade.num }}
-        <h3>Время покупки: {{ trade.timeStart }}</h3>
-        <h3>Время продажи: {{ trade.timeEnd }}</h3>
-        <h3>Тип: {{ trade.type }}</h3>
-        <h3> 
-          {% if figis2.get(trade.figi) %}
-          Позиция: {{ figis2.get(trade.figi) }}
+        <form action="/change" method="post">
+          <button type="submit">
+            Выключить/Включить
+          </button>
+        </form>
+      <div class="block">
+        <form action="/change_q" method="post">
+          <label for="q">Лот: </label>
+          <input type="text" value="{{q_limit}}" name="q">
+          <button type="submit">
+            Изменить лот
+          </button>
+        </form>
+      </div>
+      
+      <form action="/change_k" method="post">
+        Торгует: 
+        <select name="k">
+          {% for i in figis.keys() %}
+            <option value="{{figis.get(i)}}"
+            {% if i == figi_name %}
+            selected
+            {%endif%}
+            >{{i}}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Установить</button>
+      </form>
+      <h3>Добавить новую котироку</h3>
+      <form action="/add_k" method="post" id="add_k">
+        <label for="ticker">Тикер: </label>
+        <input type="text" name="ticker" id="add_k__ticker" value="{{ add_ticker if add_ticker }}">
+        <br>
+        <label for="type">Тип инструмента</label>
+        <select name="type">
+          <option value="share"
+            {% if selected_type == "share" %}
+            selected
+            {% endif %}
+          >Акция</option>
+          <option value="futures"
+            {% if selected_type == "futures" %}
+            selected
+            {% endif %}
+          >Фьючерс</option>
+        </select>
+        <button type="submit">Добавить</button>
+      </form>
+      <br>
+      {% if found_tickers and f.len(found_tickers) > 1 %}
+        <form action="/exit_add_k" method="post">
+          <button id="add_k_close">Завершить поиск</button>
+        </form>
+      {% endif %}
+      <div class="block" id="add_k_result">
+        {% if found_tickers and f.len(found_tickers) > 1 %}
+          {% if f.len(found_tickers) > 7 %}
+          Результатов слишком много, укажите конкретнее
+          {% endif %}
+          {% for i in found_tickers %}
+            <br>
+            <h4>Тикер: {{ i.ticker }}</h4>
+            <h4>Название: {{ i.name }}</h4>
+  
+            <h4>Тип: 
+              {% if i.instrument_type == "futures" %}
+              Фьючерс
+              {% elif i.instrument_type == "share" %}
+              Акция
+              {% else %}
+              {{ i.instrument_type }}
+              {% endif %}
+            </h4>
+          {% endfor %}
+        {% endif %}
+      </div>
+      <h2>Бот заработал: {{ f.round(result, 2) }}</h2>
+      <h1>Портфель:</h1>
+      -----------
+      <br>
+      <h1>Сумма: {{ f.round(q2f(portfolio.total_amount_shares) + q2f(portfolio.total_amount_currencies))}} руб</h1>
+      <h2>Акций на {{q2f(portfolio.total_amount_shares)}} {{ portfolio.total_amount_shares.currency }}</h2>
+      <h2>Валюты на {{q2f(portfolio.total_amount_currencies)}} {{ portfolio.total_amount_shares.currency }}</h2>
+      <h2>Фьючерсов на {{q2f(portfolio.total_amount_futures)}} {{ portfolio.total_amount_shares.currency }}</h2>
+      ------------
+      <br>
+      <h2>Позиции портфеля: </h2>
+      {%for i in portfolio.positions%}
+        =====================
+        <br>
+        <h3>
+          {% if figis2.get(i.figi) %}
+            Позиция: {{ figis2.get(i.figi) }}
           {% else %}
-            FIGI: {{ trade.figi }}
+            FIGI: {{ i.figi }}
           {% endif %}
         </h3>
-        <h3>Заработок: {{ f.round(trade.result, 2) }}</h3>
-      </div>
-    {% endfor %}
-  </div>
-  
-  <div class="elem">
-    <form action="/change_num_trades" method="post">
-      <label for="num">Вывести сделки за последние ____ дней</label>
-      <input type="number" name="num" value="{{ settings.num_trades }}">
-      <button type="submit">Отправить</button>
-    </form>
-    {% if unsuccessful_trade %}
-    <div class="block alert">
-      <h3>Сделка не может быть исполнена в связи с ошибкой. Попытки повторить проводятся в авто-режиме</h3>
-      <h3>Сигнал: {{ unsuccessful_trade }}</h3>
-      <form action="/break_waiting" method="get">
-        <button type="submit">Отменить сделку</button>
-      </form>
-    </div>
-    {% endif %}
-    {% for order in orders.operations %}
-      {% if (settings.show_fees or (order.type != 'Удержание комиссии за операцию' and order.type != 'Списание вариационной маржи')) %}
-        <div class="block
-        {% if order.type != 'Удержание комиссии за операцию' and order.type != 'Списание вариационной маржи' and order.type != 'Зачисление вариационной маржи'%}
-        action
-        {% else %}
-        fee 
+          {% if i.instrument_type == "currency" %}
+          <h3>Тип: валюта</h3>
+        {% elif i.instrument_type == "share" %}
+          <h3>Тип: акция</h3>
+        {% elif i.instrument_type == "futures" %}
+          <h3>Тип: фьючерс</h3>
         {% endif %}
-        ">
-          <h3>Операция: {{ order.type }}</h3>
-          {% if order.type != 'Удержание комиссии за операцию' and order.type != 'Списание вариационной маржи' and order.type != 'Зачисление вариационной маржи' %}
+        {% if i.instrument_type == "currency" %}
+        <h3>Сумма: {{ f.round(q2f(i.quantity), 2) }} </h3>
+        {% else %}
+        <h3>Сумма: {{ f.round(q2f(i.quantity) * q2f(i.current_price),2) }} {{ i.current_price.currency }}</h3>
+        {% endif %}
+      {%endfor%}
+    </div>
+  
+    <div class="elem">
+      {% if f.len(trades) == 0 %}
+      <h3>Нет завершенных сделок</h3>
+      {% endif %}
+      {% for trade in trades %}
+        <div class="trade block">
+          № {{ trade.num }}
+          <h3>Время покупки: {{ trade.timeStart }}</h3>
+          <h3>Время продажи: {{ trade.timeEnd }}</h3>
+          <h3>Тип: {{ trade.type }}</h3>
           <h3> 
-            {% if figis2.get(order.figi) %}
-            Позиция: {{ figis2.get(order.figi) }}
+            {% if figis2.get(trade.figi) %}
+            Позиция: {{ figis2.get(trade.figi) }}
             {% else %}
-              FIGI: {{ order.figi }}
+              FIGI: {{ trade.figi }}
             {% endif %}
           </h3>
-          {%endif%}
-          {% if (order.payment.nano|string)[0] != '-' %}
-          <h3>Сумма: {{ q2f(order.payment) }} {{order.payment.currency}}</h3>
-          {% else %}
-          <h3>Сумма: {{ (order.payment.units|string + "." + (order.payment.nano|string)[1:3]) }} {{order.payment.currency}}</h3>
-          {% endif %}
-          {% if order.price.units != 0 %}
-          <h3>Цена позиции: {{ q2f(order.price) }} {{order.price.currency}}</h3>
-          <h3>Объем сделки: {{ order.quantity }}</h3>
-          {% endif %}
-          <h3>Дата: {{ f.correct_timezone(order.date).strftime("%Y-%m-%d %H:%M") }}</h3>
-       </div>
-
+          <h3>Заработок: {{ f.round(trade.result, 2) }}</h3>
+        </div>
+      {% endfor %}
+    </div>
+    
+    <div class="elem">
+      <form action="/change_num_trades" method="post">
+        <label for="num">Вывести сделки за последние ____ дней</label>
+        <input type="number" name="num" value="{{ settings.num_trades }}">
+        <button type="submit">Отправить</button>
+      </form>
+      {% if unsuccessful_trade %}
+      <div class="block alert">
+        <h3>Сделка не может быть исполнена в связи с ошибкой. Попытки повторить проводятся в авто-режиме</h3>
+        <h3>Сигнал: {{ unsuccessful_trade }}</h3>
+        <form action="/break_waiting" method="get">
+          <button type="submit">Отменить сделку</button>
+        </form>
+      </div>
       {% endif %}
-    {% endfor %}
-  </div>
+      {% for order in orders.operations %}
+        {% if (settings.show_fees or (order.type != 'Удержание комиссии за операцию' and order.type != 'Списание вариационной маржи')) %}
+          <div class="block
+          {% if order.type != 'Удержание комиссии за операцию' and order.type != 'Списание вариационной маржи' and order.type != 'Зачисление вариационной маржи'%}
+          action
+          {% else %}
+          fee 
+          {% endif %}
+          ">
+            <h3>Операция: {{ order.type }}</h3>
+            {% if order.type != 'Удержание комиссии за операцию' and order.type != 'Списание вариационной маржи' and order.type != 'Зачисление вариационной маржи' %}
+            <h3> 
+              {% if figis2.get(order.figi) %}
+              Позиция: {{ figis2.get(order.figi) }}
+              {% else %}
+                FIGI: {{ order.figi }}
+              {% endif %}
+            </h3>
+            {%endif%}
+            {% if (order.payment.nano|string)[0] != '-' %}
+            <h3>Сумма: {{ q2f(order.payment) }} {{order.payment.currency}}</h3>
+            {% else %}
+            <h3>Сумма: {{ (order.payment.units|string + "." + (order.payment.nano|string)[1:3]) }} {{order.payment.currency}}</h3>
+            {% endif %}
+            {% if order.price.units != 0 %}
+            <h3>Цена позиции: {{ q2f(order.price) }} {{order.price.currency}}</h3>
+            <h3>Объем сделки: {{ order.quantity }}</h3>
+            {% endif %}
+            <h3>Дата: {{ f.correct_timezone(order.date).strftime("%Y-%m-%d %H:%M") }}</h3>
+         </div>
+  
+        {% endif %}
+      {% endfor %}
+    </div>
+  {% endif %}
+  
   <script>
     const form = document.getElementById("add_k")
     const inp = document.getElementById("add_k__ticker")
