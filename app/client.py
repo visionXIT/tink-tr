@@ -33,12 +33,14 @@ class TinkoffClient:
     async def ainit(self):
         self.client = await AsyncClient(token=self.token, app_name=settings.app_name).__aenter__()
         if settings.use_candle_history_cache:
-            self.sync_client = Client(token=self.token, app_name=settings.app_name).__enter__()
+            self.sync_client = Client(
+                token=self.token, app_name=settings.app_name).__enter__()
             self.market_data_cache = MarketDataCache(
-                settings=MarketDataCacheSettings(base_cache_dir=Path("market_data_cache")),
+                settings=MarketDataCacheSettings(
+                    base_cache_dir=Path("market_data_cache")),
                 services=self.sync_client,
             )
-            
+
     async def get_operations(self, **kwagrs):
         if self.sandbox:
             return await self.client.sandbox.get_sandbox_operations(**kwagrs)
@@ -82,11 +84,9 @@ class TinkoffClient:
 
     async def get_instrument(self, **kwargs) -> InstrumentResponse:
         return await self.client.instruments.get_instrument_by(**kwargs)
-    
+
     async def find_instrument(self, **kwagrs):
         return await self.client.instruments.find_instrument(**kwagrs)
-
-    
 
 
 client = TinkoffClient(token=settings.token, sandbox=False)

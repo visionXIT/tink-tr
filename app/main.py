@@ -22,10 +22,10 @@ from tinkoff.invest import InstrumentType
 # from instruments_config.parser import instruments_config
 from app.client import client
 from app.settings import settings
-from  app.utils.portfolio import get_position
-from  app.utils.quotation import quotation_to_float
+from app.utils.portfolio import get_position
+from app.utils.quotation import quotation_to_float
 
-from  app.settings import settings
+from app.settings import settings
 
 logging.basicConfig(
     level=settings.log_level,
@@ -64,19 +64,22 @@ bot_working = True
 
 unsuccessful_trade = None
 
+
 def correct_timezone(date):
     return date + datetime.timedelta(hours=3)
+
 
 async def prepare_data():
     global ii
     print("prepared")
     try:
-        ii= (
+        ii = (
             await client.get_instrument(id_type=INSTRUMENT_ID_TYPE_FIGI, id=figi)
             # await client.get_instrument(id_type=INSTRUMENT_ID_TYPE_ISIN)
         ).instrument
     except:
         return 0
+
 
 async def get_position_quantity() -> int:
     """
@@ -88,6 +91,7 @@ async def get_position_quantity() -> int:
     if position is None:
         return 0
     return int(quotation_to_float(position.quantity))
+
 
 async def handle_sell():
     position_quantity = await get_position_quantity()
@@ -114,6 +118,7 @@ async def handle_sell():
     else:
         logger.info("Have nothing to sell")
 
+
 async def handle_buy():
     position_quantity = await get_position_quantity()
     if position_quantity < q_limit:
@@ -139,17 +144,21 @@ async def handle_buy():
         ###
     else:
         logger.info("Already have")
-        
+
+
 class Param(BaseModel):
     text: str
 
+
 app = FastAPI()
+
+
 @app.post("/")
 async def get_alert(alert: Any = Body(None)):
     global ii, unsuccessful_trade
-    
+
     logger.info("POST query")
-    
+
     if client.client == None:
         await client.ainit()
     if ii == None:
@@ -160,19 +169,20 @@ async def get_alert(alert: Any = Body(None)):
             if res == 0:
                 logger.error("Cannot prepare data")
                 return
-        
+
     # with open("log.txt", "a") as f:
     #     f.write(datetime.datetime.now().strftime() + "  " + str(alert) + " :: " + str(bot_working) + "\n")
     signal = alert.decode("ascii")
     res = None
     if bot_working:
-        if signal== 'BUY':
+        if signal == 'BUY':
             res = await handle_buy()
         elif signal == 'SELL':
             res = await handle_sell()
     if res == 0:
-        unsuccessful_trade = signal  
+        unsuccessful_trade = signal
         asyncio.create_task(wait_for_trade())
+
 
 async def wait_for_trade():
     global unsuccessful_trade
@@ -180,12 +190,12 @@ async def wait_for_trade():
     while unsuccessful_trade != None:
         now = datetime.datetime.now()
         print("FROM", now)
-        
+
         if now.hour == 14 and now.minute in range(0, 6):
             a = max(5 * 60 - now.minute * 60 - now.second + 1, 0)
             print(a, a // 60, a % 60)
             await asyncio.sleep(a)
-            
+
         elif (now.hour == 18 and now.minute >= 50):
             a = max(15 * 60 - (now.minute - 50) * 60 - now.second + 1, 0)
             print(a, a // 60, a % 60)
@@ -195,13 +205,13 @@ async def wait_for_trade():
             a = max(5 * 60 - now.minute * 60 - now.second + 1, 0)
             print(a, a // 60, a % 60)
             await asyncio.sleep(a)
-            
+
         else:
             await asyncio.sleep(10)
-            
+
         print("Waiting", unsuccessful_trade)
-        
-        if unsuccessful_trade== 'BUY':
+
+        if unsuccessful_trade == 'BUY':
             res = await handle_buy()
             if res == None:
                 unsuccessful_trade = None
@@ -211,51 +221,53 @@ async def wait_for_trade():
                 unsuccessful_trade = None
     print("finished")
 
+
 @app.get("/check")
-async def health():    
+async def health():
     logger.info("check quiry")
 
     return "working" if bot_working else "not working"
+
 
 @app.get("/break_waiting")
 async def break_waiting():
     global unsuccessful_trade
     unsuccessful_trade = None
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
-    
+
 
 @app.get("/", response_class=HTMLResponse)
 async def main(request: Request):
     global i, found_tickers
-    
+
     logger.info("main query")
-    
+
     if client.client == None:
         await client.ainit()
     if ii == None:
         await prepare_data()
-            
+
     port = await client.get_portfolio(account_id=settings.account_id)
-    orders = await client.get_operations(account_id=settings.account_id, 
+    orders = await client.get_operations(account_id=settings.account_id,
                                          from_=datetime.datetime.now() - datetime.timedelta(days=num_trades),
                                          to=datetime.datetime.now())
     trades, inc = calc_trades(copy.copy(orders.operations))
     trades.reverse()
     orders.operations.reverse()
     opers = []
-    
+
     def get_last_q(j):
         nonlocal opers
-        
+
         for i in range(j - 1, -1, -1):
             if orders.operations[i].type in ["Покупка ценных бумаг", "Продажа ценных бумаг"]:
                 return orders.operations[i]
-            
+
     def get_first():
         for i in opers:
             if i.type in ["Покупка ценных бумаг", "Продажа ценных бумаг"]:
                 return i
-            
+
     inc = 0
     for i in range(len(orders.operations)):
         oper = orders.operations[i]
@@ -273,9 +285,9 @@ async def main(request: Request):
                 inc += quotation_to_float(oper.payment)
 
     last = get_last_q(len(orders.operations))
-    if last.type == get_first().type:
+    if last and get_first() and last.type == get_first().type:
         inc -= quotation_to_float(last.payment)
-    
+
     opers.reverse()
     orders.operations = opers
     context = {
@@ -306,85 +318,86 @@ async def main(request: Request):
     }
     if not found_tickers or len(found_tickers) < 2:
         found_tickers = None
-    
-        
+
     return templates.TemplateResponse(
         request=request, name="index.html", context=context
     )
-    
+
+
 def calc_trades(trades):
     trades.reverse()
     res = []
     prev = None
     inc = 0
     num = 1
-    
+
     def add_mark(prev, i, type):
         nonlocal num, inc
         inc += quotation_to_float(prev.payment) / 2 + \
             quotation_to_float(i.payment) / 2
         res.append({
-                    "num": num,
-                    "timeStart": correct_timezone(i.date).strftime("%Y-%m-%d %H:%M"),
-                    "timeEnd": correct_timezone(prev.date).strftime("%Y-%m-%d %H:%M"),
-                    "type": type,
-                    "figi": i.figi,
-                    "result": quotation_to_float(prev.payment) / 2 +
-                            quotation_to_float(i.payment) / 2
+            "num": num,
+            "timeStart": correct_timezone(i.date).strftime("%Y-%m-%d %H:%M"),
+            "timeEnd": correct_timezone(prev.date).strftime("%Y-%m-%d %H:%M"),
+            "type": type,
+            "figi": i.figi,
+            "result": quotation_to_float(prev.payment) / 2 +
+            quotation_to_float(i.payment) / 2
         })
         num += 1
-        
+
     for i in trades:
         if i.type == "Покупка ценных бумаг" and i.quantity == q_limit * 2:
-            if prev != None and prev.figi == i.figi and prev.type == "Продажа ценных бумаг" :
+            if prev != None and prev.figi == i.figi and prev.type == "Продажа ценных бумаг":
                 add_mark(prev, i, "Short")
             prev = i
         elif i.type == "Продажа ценных бумаг" and i.quantity == q_limit * 2:
-            if prev != None and prev.figi == i.figi  and prev.type == "Покупка ценных бумаг" :
+            if prev != None and prev.figi == i.figi and prev.type == "Покупка ценных бумаг":
                 add_mark(prev, i, "Long")
             prev = i
         elif i.type == "Удержание комиссии за операцию" or i.type == "Списание вариационной маржи" or i.type == "Зачисление вариационной маржи":
             inc += quotation_to_float(i.payment)
 
-    
     return res, inc
 
-    
+
 @app.post("/change_num_trades")
 async def change_num_trade(num: Annotated[int, Form()]):
     global num_trades
     print(num)
     num_trades = num
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
-    
-   
+
+
 @app.post("/change")
 async def change():
     global bot_working
-    
+
     logger.info("change query")
-    
+
     bot_working = not bot_working
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
 
 @app.post('/exit_add_k')
 async def exit_add_k():
     global add_ticker, found_tickers, selected_type
     add_ticker = found_tickers = selected_type = None
-    
+
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
 
 @app.post("/add_k")
 async def change_k(ticker: Annotated[str, Form()], type: Annotated[str, Form()]):
     global add_ticker, found_tickers, selected_type
-    
+
     if ticker == " " or type == " ":
         return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
-    
+
     logger.info("main query")
-    
+
     await check_client()
-        
+
     selected_type = type
 
     i_type = None
@@ -394,7 +407,7 @@ async def change_k(ticker: Annotated[str, Form()], type: Annotated[str, Form()])
         i_type = InstrumentType.INSTRUMENT_TYPE_FUTURES
     else:
         i_type = InstrumentType.INSTRUMENT_TYPE_UNSPECIFIED
-    
+
     add_ticker = ticker
     res = await client.find_instrument(query=ticker, instrument_kind=i_type, api_trade_available_flag=True)
 
@@ -404,8 +417,9 @@ async def change_k(ticker: Annotated[str, Form()], type: Annotated[str, Form()])
         KOT2[found_tickers[0].figi] = found_tickers[0].ticker
         add_ticker = None
         selected_type = None
-    
+
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
 
 async def check_client():
     global ii
@@ -414,19 +428,21 @@ async def check_client():
     if ii == None:
         await prepare_data()
 
+
 @app.post("/change_q")
 async def change(q: Annotated[str, Form()]):
     global q_limit
-    
+
     logger.info("change query")
-    
+
     q_limit = float(q)
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
 
 @app.post("/change_k")
 async def change(k: Annotated[str, Form()]):
     global figi, figi_name
-    
+
     figi = k
     figi_name = KOT2[figi]
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
