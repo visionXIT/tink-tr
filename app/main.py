@@ -66,6 +66,10 @@ bot_working = True
 unsuccessful_trade = None
 
 
+def round2(r, g=2):
+    return round(r, 3)
+
+
 def correct_timezone(date):
     return date + datetime.timedelta(hours=3)
 
@@ -252,13 +256,12 @@ async def main(request: Request):
     orders = await client.get_operations(account_id=settings.account_id,
                                          from_=datetime.datetime.now() - datetime.timedelta(days=num_trades),
                                          to=datetime.datetime.now())
-    trades, inc = calc_trades(copy.copy(orders.operations))
+    trades, inc, p = calc_trades(copy.copy(orders.operations))
     trades.reverse()
     orders.operations.reverse()
     opers = []
-    print(request.cookies)
 
-    if request.cookies.get("pass"):
+    if request.cookies.get("pass1"):
         auth = True
     else:
         auth = False
@@ -267,8 +270,8 @@ async def main(request: Request):
         nonlocal opers
 
         for i in range(j - 1, -1, -1):
-            if orders.operations[i].type in ["Покупка ценных бумаг", "Продажа ценных бумаг"]:
-                return orders.operations[i]
+            if p[i].type in ["Покупка ценных бумаг", "Продажа ценных бумаг"]:
+                return p[i]
 
     def get_first():
         for i in opers:
@@ -276,8 +279,9 @@ async def main(request: Request):
                 return i
 
     inc = 0
-    for i in range(len(orders.operations)):
-        oper = orders.operations[i]
+    for i in range(len(p)):
+        print(i)
+        oper = p[i]
         if oper.type == "Покупка ценных бумаг" or oper.type == "Продажа ценных бумаг":
             if oper.quantity == q_limit or oper.quantity == q_limit * 2 or (get_last_q(i) and get_last_q(i).quantity / 2 + q_limit == oper.quantity):
                 opers.append(oper)
@@ -287,11 +291,12 @@ async def main(request: Request):
             inc += quotation_to_float(oper.payment)
 
         elif oper.type == "Удержание комиссии за операцию":
-            if len(opers) > 0 and orders.operations[i - 1].id == opers[-1].id and opers[-1].quantity in [q_limit, q_limit * 2]:
+            if len(opers) > 0 and p[i - 1].id == opers[-1].id and opers[-1].quantity in [q_limit, q_limit * 2]:
                 opers.append(oper)
                 inc += quotation_to_float(oper.payment)
+        print(inc, oper.date)
 
-    last = get_last_q(len(orders.operations))
+    last = get_last_q(len(p))
     if last and get_first() and last.type == get_first().type:
         inc -= quotation_to_float(last.payment)
 
@@ -307,7 +312,7 @@ async def main(request: Request):
         },
         "f": {
             "correct_timezone": correct_timezone,
-            "round": round,
+            "round": round2,
             "len": len
         },
         "trades": trades,
@@ -335,12 +340,13 @@ async def main(request: Request):
 def calc_trades(trades):
     trades.reverse()
     res = []
+    p = []
     prev = None
     inc = 0
     num = 1
 
     def add_mark(prev, i, type):
-        nonlocal num, inc
+        nonlocal num, inc, p
         inc += quotation_to_float(prev.payment) / 2 + \
             quotation_to_float(i.payment) / 2
         res.append({
@@ -359,21 +365,24 @@ def calc_trades(trades):
             if prev != None and prev.figi == i.figi and prev.type == "Продажа ценных бумаг":
                 add_mark(prev, i, "Short")
             prev = i
+            p.append(prev)
         elif i.type == "Продажа ценных бумаг" and i.quantity == q_limit * 2:
             if prev != None and prev.figi == i.figi and prev.type == "Покупка ценных бумаг":
                 add_mark(prev, i, "Long")
             prev = i
+            p.append(prev)
         elif i.type == "Удержание комиссии за операцию" or i.type == "Списание вариационной маржи" or i.type == "Зачисление вариационной маржи":
             inc += quotation_to_float(i.payment)
+            p.append(i)
 
-    return res, inc
+    return res, inc, p
 
 
 @app.post("/pass")
 async def passs(s: Annotated[str, Form()], response: Response):
     res = RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
     if settings.password == s:
-        res.set_cookie(key="pass", value=True)
+        res.set_cookie(key="pass1", value=True, expires=60 * 30)
     return res
 
 
