@@ -88,6 +88,17 @@
             Выключить/Включить
           </button>
         </form>
+      {% if (inverted) %}
+      <h1>Бот инвертирован</h1>
+      {% else %}
+      <h1>Бот не инвертирован</h1>
+      {% endif %}
+      <form action="/change_inv" method="post">
+        <button type="submit">
+          Инвертировать
+        </button>
+      </form>
+      
       <div class="block">
         <form action="/change_q" method="post">
           <label for="q">Лот: </label>

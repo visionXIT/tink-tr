@@ -62,6 +62,7 @@ add_ticker = None
 found_tickers = None
 selected_type = None
 bot_working = True
+inverted = False
 
 unsuccessful_trade = None
 
@@ -180,12 +181,13 @@ async def get_alert(alert: Any = Body(None)):
     signal = alert.decode("ascii")
     res = None
     if bot_working:
-        if signal == 'BUY':
+        if (signal == 'BUY' and not inverted) or (signal == "SELL" and inverted):
             res = await handle_buy()
-        elif signal == 'SELL':
+        elif (signal == 'SELL' and not inverted) or (signal == "BUY" and inverted):
             res = await handle_sell()
     if res == 0:
-        unsuccessful_trade = signal
+        unsuccessful_trade = "BUY" if (signal == "BUY" and not inverted) or (
+            signal == "SELL" and inverted) else "SELL"
         asyncio.create_task(wait_for_trade())
 
 
@@ -331,6 +333,7 @@ async def main(request: Request):
             "round": round2,
             "len": len
         },
+        "inverted": inverted,
         "trades": trades,
         "result": inc,
         "q2f": quotation_to_float,
@@ -406,6 +409,13 @@ async def passs(s: Annotated[str, Form()], response: Response):
 async def change_num_trade(num: Annotated[int, Form()]):
     global num_trades
     num_trades = num
+    return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
+
+@app.post('/change_inv')
+def ch():
+    global inverted
+    inverted = not inverted
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
 
