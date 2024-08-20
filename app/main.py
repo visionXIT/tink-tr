@@ -266,12 +266,12 @@ async def main(request: Request):
     else:
         auth = False
 
-    def get_last_q(j):
-        nonlocal opers
-
+    def get_last_q(j, f=1):
+        nonlocal opers, orders
+        f = p if f == 1 else orders.operations
         for i in range(j - 1, -1, -1):
-            if p[i].type in ["Покупка ценных бумаг", "Продажа ценных бумаг"]:
-                return p[i]
+            if f[i].type in ["Покупка ценных бумаг", "Продажа ценных бумаг"]:
+                return f[i]
 
     def get_first():
         for i in opers:
@@ -294,11 +294,27 @@ async def main(request: Request):
             if len(opers) > 0 and p[i - 1].id == opers[-1].id and opers[-1].quantity in [q_limit, q_limit * 2]:
                 opers.append(oper)
                 inc += quotation_to_float(oper.payment)
-        print(inc, oper.date)
-
     last = get_last_q(len(p))
     if last and get_first() and last.type == get_first().type:
         inc -= quotation_to_float(last.payment)
+    opers = []
+
+    for i in range(len(orders.operations)):
+        print(i)
+        oper = orders.operations[i]
+        if oper.type == "Покупка ценных бумаг" or oper.type == "Продажа ценных бумаг":
+            if oper.quantity == q_limit or oper.quantity == q_limit * 2 or (get_last_q(i, 2) and get_last_q(i, 2).quantity / 2 + q_limit == oper.quantity):
+                opers.append(oper)
+                # inc += quotation_to_float(oper.payment)
+        elif oper.type == "Списание вариационной маржи" or oper.type == "Зачисление вариационной маржи":
+            opers.append(oper)
+            # inc += quotation_to_float(oper.payment)
+
+        elif oper.type == "Удержание комиссии за операцию":
+            if len(opers) > 0 and orders.operations[i - 1].id == opers[-1].id:
+                opers.append(oper)
+                # inc += quotation_to_float(oper.payment)
+        # print(inc, oper.date)
 
     opers.reverse()
     orders.operations = opers
