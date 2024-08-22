@@ -25,6 +25,7 @@ from app.settings import settings
 from app.utils.portfolio import get_position
 from app.utils.quotation import quotation_to_float
 
+
 from app.settings import settings
 
 logging.basicConfig(
