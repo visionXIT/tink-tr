@@ -119,6 +119,9 @@ async def handle_sell():
                 account_id=settings.account_id,
             )
         except Exception as e:
+            with open("log.txt", "a") as f:
+                f.write(datetime.datetime.now().strftime() +
+                        "    ERROR " + str(e))
             logger.error(
                 f"Failed to post sell order. figi={figi}. {e}")
             return 0
@@ -148,6 +151,9 @@ async def handle_buy():
         except Exception as e:
             logger.error(
                 f"Failed to post buy order. figi={figi}. {e}")
+            with open("log.txt", "a") as f:
+                f.write(datetime.datetime.now().strftime() +
+                        "    ERROR " + str(e))
             return 0
         ###
     else:
@@ -178,8 +184,9 @@ async def get_alert(alert: Any = Body(None)):
                 logger.error("Cannot prepare data")
                 return
 
-    # with open("log.txt", "a") as f:
-    #     f.write(datetime.datetime.now().strftime() + "  " + str(alert) + " :: " + str(bot_working) + "\n")
+    with open("log.txt", "a") as f:
+        f.write(datetime.datetime.now().strftime() + "  " +
+                str(alert) + " :: " + str(bot_working) + "\n")
     signal = alert.decode("ascii")
     res = None
     if bot_working:
