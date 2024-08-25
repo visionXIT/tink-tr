@@ -291,7 +291,6 @@ async def main(request: Request):
 
     inc = 0
     for i in range(len(p)):
-        print(i)
         oper = p[i]
         if oper.type == "Покупка ценных бумаг" or oper.type == "Продажа ценных бумаг":
             if oper.quantity == q_limit or oper.quantity == q_limit * 2 or (get_last_q(i) and get_last_q(i).quantity / 2 + q_limit == oper.quantity):
