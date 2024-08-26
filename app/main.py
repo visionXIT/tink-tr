@@ -422,10 +422,10 @@ async def changeShowAllTrades():
 async def make_trade(trade: Annotated[str, Form()]):
     print(trade)
 
-    # if trade == "buy":
-    #     await handle_buy()
-    # elif trade == "sell":
-    #     await handle_sell()
+    if trade == "buy":
+        await handle_buy()
+    elif trade == "sell":
+        await handle_sell()
 
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
