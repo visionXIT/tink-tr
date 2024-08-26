@@ -1,9 +1,7 @@
-from pathlib import Path
 from typing import Optional
 
 from tinkoff.invest import (
     AsyncClient,
-    Client,
     PostOrderResponse,
     GetLastPricesResponse,
     OrderState,
@@ -11,7 +9,6 @@ from tinkoff.invest import (
     InstrumentResponse,
 )
 from tinkoff.invest.async_services import AsyncServices
-from tinkoff.invest.caching.market_data_cache.cache_settings import MarketDataCacheSettings
 from tinkoff.invest.services import MarketDataCache, Services
 
 from app.settings import settings
@@ -32,14 +29,6 @@ class TinkoffClient:
 
     async def ainit(self):
         self.client = await AsyncClient(token=self.token, app_name=settings.app_name).__aenter__()
-        if settings.use_candle_history_cache:
-            self.sync_client = Client(
-                token=self.token, app_name=settings.app_name).__enter__()
-            self.market_data_cache = MarketDataCache(
-                settings=MarketDataCacheSettings(
-                    base_cache_dir=Path("market_data_cache")),
-                services=self.sync_client,
-            )
 
     async def get_operations(self, **kwagrs):
         if self.sandbox:

@@ -65,6 +65,7 @@ found_tickers = None
 selected_type = None
 bot_working = True
 inverted = False
+showAllTrades = True
 
 unsuccessful_trade = None
 
@@ -197,6 +198,11 @@ async def get_alert(alert: Any = Body(None)):
     if res == 0:
         unsuccessful_trade = "BUY" if (signal == "BUY" and not inverted) or (
             signal == "SELL" and inverted) else "SELL"
+        with open("e.txt", "a") as f:
+            f.write(
+                datetime.datetime.now().strftime() + "  " +
+                str(unsuccessful_trade) + "\n"
+            )
         asyncio.create_task(wait_for_trade())
 
 
@@ -205,21 +211,17 @@ async def wait_for_trade():
     res = 0
     while unsuccessful_trade != None:
         now = datetime.datetime.now()
-        print("FROM", now)
 
         if now.hour == 14 and now.minute in range(0, 6):
             a = max(5 * 60 - now.minute * 60 - now.second + 1, 0)
-            print(a, a // 60, a % 60)
             await asyncio.sleep(a)
 
         elif (now.hour == 18 and now.minute >= 50):
             a = max(15 * 60 - (now.minute - 50) * 60 - now.second + 1, 0)
-            print(a, a // 60, a % 60)
             await asyncio.sleep(a)
 
         elif (now.hour == 19 and now.minute <= 5):
             a = max(5 * 60 - now.minute * 60 - now.second + 1, 0)
-            print(a, a // 60, a % 60)
             await asyncio.sleep(a)
 
         else:
@@ -310,7 +312,6 @@ async def main(request: Request):
     opers = []
 
     for i in range(len(orders.operations)):
-        print(i)
         oper = orders.operations[i]
         if oper.type == "Покупка ценных бумаг" or oper.type == "Продажа ценных бумаг":
             if oper.quantity == q_limit or oper.quantity == q_limit * 2 or (get_last_q(i, 2) and get_last_q(i, 2).quantity / 2 + q_limit == oper.quantity):
@@ -327,7 +328,10 @@ async def main(request: Request):
         # print(inc, oper.date)
 
     opers.reverse()
-    orders.operations = opers
+    if not showAllTrades:
+        orders.operations = opers
+    else:
+        orders.operations.reverse()
     context = {
         "bot_working": bool(bot_working),
         "portfolio": port,
@@ -354,7 +358,8 @@ async def main(request: Request):
         "found_tickers": found_tickers,
         "selected_type": selected_type,
         "unsuccessful_trade": unsuccessful_trade,
-        "auth": auth
+        "auth": auth if settings.password else True,
+        "show_all_trades": showAllTrades
     }
     if not found_tickers or len(found_tickers) < 2:
         found_tickers = None
@@ -405,6 +410,26 @@ def calc_trades(trades):
     return res, inc, p
 
 
+@app.post("/change_show_all_trades")
+async def changeShowAllTrades():
+    global showAllTrades
+
+    showAllTrades = not showAllTrades
+    return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
+
+@app.post("/make_trade")
+async def make_trade(trade: Annotated[str, Form()]):
+    print(trade)
+
+    # if trade == "buy":
+    #     await handle_buy()
+    # elif trade == "sell":
+    #     await handle_sell()
+
+    return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
+
 @app.post("/pass")
 async def passs(s: Annotated[str, Form()], response: Response):
     res = RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
@@ -451,8 +476,6 @@ async def change_k(ticker: Annotated[str, Form()], type: Annotated[str, Form()])
 
     if ticker == " " or type == " ":
         return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
-
-    logger.info("main query")
 
     await check_client()
 

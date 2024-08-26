@@ -40,13 +40,25 @@
 
     .modal {
       background-color: aqua;
-      opacity: 20%;
+      opacity: 30%;
       position: fixed;
       left: 30%;
       top: 30px;
       color: black;
       font-size: large;
       font-weight: bolder;
+      padding: 20px;
+    }
+
+    .confirm-modal {
+      background-color: coral;
+      opacity: 90%;
+      position: fixed;
+      left: 30%;
+      top: 30px;
+      color: black;
+      font-size: large;
+      font-weight: bold;
       padding: 20px;
     }
 
@@ -228,11 +240,32 @@
       {% endfor %}
     </div>
     
-    <div class="elem">
+    <div class="elem"> 
       <form action="/change_num_trades" method="post">
         <label for="num">Вывести сделки за последние ____ дней</label>
         <input type="number" name="num" value="{{ settings.num_trades }}">
         <button type="submit">Отправить</button>
+      </form>
+      <form style="margin-top: 15px;" action="/make_trade" method="post" id="makeTradeForm">
+        <select name="trade" id="trade">
+          <option value="buy">Купить</option>
+          <option value="sell">Продать</option>
+        </select>
+        <button id="trySubmitButton">Совершить сделку</button>
+        <div class="hidden" id="confirmTrade">
+          <p>Уверены, что хотите <span id="tradeTypeText"></span>?</p>
+          <button type="submit">Принудительно войти в позицию</button>
+          <button id="closeTrade">Отклонить</button>
+        </div>
+      </form>
+      <form style="margin-top: 15px;" action="/change_show_all_trades" method="post">
+        <button type="submit">
+          {% if show_all_trades %}
+          Фильтровать сделки по выбранной лотности
+          {% else %}
+          Показать все сделки
+          {% endif %}
+        </button>
       </form>
       {% if unsuccessful_trade %}
       <div class="block alert">
@@ -283,10 +316,28 @@
     const form = document.getElementById("add_k")
     const inp = document.getElementById("add_k__ticker")
     const modal = document.getElementById("modal")
+    const trySubmitButton = document.getElementById("trySubmitButton")
+    const confirmTrade = document.getElementById("confirmTrade")
+    const closeTradeButton = document.getElementById("closeTrade")
+    const tradeTypeText = document.getElementById("tradeTypeText")
+
+
     form.onsubmit = (ev) => {
       if (inp.value == "") {
         ev.preventDefault()
       }
+    }
+
+    trySubmitButton.onclick = (ev) => {
+      ev.preventDefault()
+      confirmTrade.classList = "confirm-modal"
+      const trade = document.getElementById("trade")
+      tradeTypeText.textContent = trade.options[trade.selectedIndex].text.toLowerCase()
+    }
+
+    closeTradeButton.onclick = (ev) => {
+      ev.preventDefault()
+      confirmTrade.classList = "hidden"
     }
 
     {% if found_tickers and f.len(found_tickers) == 1 %}
