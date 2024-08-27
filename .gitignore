@@ -9,3 +9,5 @@ tests/**/*.txt
 stats.db
 .pyc
 log.txt
+
+/__pycache__/
