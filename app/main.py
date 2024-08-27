@@ -186,7 +186,7 @@ async def get_alert(alert: Any = Body(None)):
                 return
 
     with open("log.txt", "a") as f:
-        f.write(datetime.datetime.now().strftime() + "  " +
+        f.write(str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "  " +
                 str(alert) + " :: " + str(bot_working) + "\n")
     signal = alert.decode("ascii")
     res = None
@@ -200,7 +200,7 @@ async def get_alert(alert: Any = Body(None)):
             signal == "SELL" and inverted) else "SELL"
         with open("e.txt", "a") as f:
             f.write(
-                datetime.datetime.now().strftime() + "  " +
+                str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "  " +
                 str(unsuccessful_trade) + "\n"
             )
         asyncio.create_task(wait_for_trade())
