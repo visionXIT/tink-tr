@@ -7,7 +7,9 @@ instruments_config.json
 market_data_cache/
 tests/**/*.txt
 stats.db
-.pyc
+*.pyc
 log.txt
 
-/__pycache__/
+**/__pycache__/
+
+*/.DS_Store

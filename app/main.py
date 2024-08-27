@@ -420,11 +420,12 @@ async def changeShowAllTrades():
 
 @app.post("/make_trade")
 async def make_trade(trade: Annotated[str, Form()]):
-    print(trade)
 
     if trade == "buy":
+        print("BUY")
         await handle_buy()
     elif trade == "sell":
+        print("SELL")
         await handle_sell()
 
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
