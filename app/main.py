@@ -172,7 +172,7 @@ app = FastAPI()
 async def get_alert(alert: Any = Body(None)):
     global ii, unsuccessful_trade
 
-    logger.info("POST query")
+    logger.info("POST query ", alert)
 
     if client.client == None:
         await client.ainit()
