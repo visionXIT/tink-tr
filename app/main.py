@@ -121,7 +121,8 @@ async def handle_sell():
             )
         except Exception as e:
             with open("log.txt", "a") as f:
-                f.write(datetime.datetime.now().strftime() +
+                f.write(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        +
                         "    ERROR " + str(e))
             logger.error(
                 f"Failed to post sell order. figi={figi}. {e}")
@@ -153,7 +154,7 @@ async def handle_buy():
             logger.error(
                 f"Failed to post buy order. figi={figi}. {e}")
             with open("log.txt", "a") as f:
-                f.write(datetime.datetime.now().strftime() +
+                f.write(datetime.datetime.now().strftime("%Y-%m-%d %H:%M") +
                         "    ERROR " + str(e))
             return 0
         ###
