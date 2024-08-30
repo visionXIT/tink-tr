@@ -122,9 +122,8 @@ async def handle_sell():
             logger.info(str(posted_order.lots_requested) + " " + str(posted_order.figi) + " " + str(posted_order.direction))
         except Exception as e:
             with open("log.txt", "a") as f:
-                f.write(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                        +
-                        "    ERROR " + str(e))
+                f.write(datetime.datetime.now().strftime("%Y-%m-%d %H:%M") +
+                        "    ERROR " + str(e) + "\n")
             logger.error(
                 f"Failed to post sell order. figi={figi}. {e}")
             return 0
@@ -157,7 +156,7 @@ async def handle_buy():
                 f"Failed to post buy order. figi={figi}. {e}")
             with open("log.txt", "a") as f:
                 f.write(datetime.datetime.now().strftime("%Y-%m-%d %H:%M") +
-                        "    ERROR " + str(e))
+                        "    ERROR " + str(e) + "\n")
             return 0
         ###
     else:
@@ -204,6 +203,7 @@ async def get_alert(request: Request, alert: Any = Body(None)):
     if res == 0:
         unsuccessful_trade = "BUY" if (signal == "BUY" and not inverted) or (
             signal == "SELL" and inverted) else "SELL"
+        logger.error("Unsucceful trade " + str(unsuccessful_trade))
         with open("e.txt", "a") as f:
             f.write(
                 str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "  " +
@@ -217,23 +217,28 @@ async def wait_for_trade():
     res = 0
     while unsuccessful_trade != None:
         now = datetime.datetime.now()
-
+        
         if now.hour == 14 and now.minute in range(0, 6):
             a = max(5 * 60 - now.minute * 60 - now.second + 1, 0)
+            logger.error("For " + str(a))
             await asyncio.sleep(a)
 
         elif (now.hour == 18 and now.minute >= 50):
             a = max(15 * 60 - (now.minute - 50) * 60 - now.second + 1, 0)
+            logger.error("For " + str(a))
+
             await asyncio.sleep(a)
 
         elif (now.hour == 19 and now.minute <= 5):
             a = max(5 * 60 - now.minute * 60 - now.second + 1, 0)
+            logger.error("For " + str(a))
+
             await asyncio.sleep(a)
 
         else:
             await asyncio.sleep(10)
 
-        print("Waiting", unsuccessful_trade)
+        logger.error("Waiting" + str(unsuccessful_trade))
 
         if unsuccessful_trade == 'BUY':
             res = await handle_buy()
@@ -243,7 +248,7 @@ async def wait_for_trade():
             res = await handle_sell()
             if res == None:
                 unsuccessful_trade = None
-    print("finished")
+    logger.info("finished")
 
 
 @app.get("/check")
