@@ -129,7 +129,7 @@ async def handle_sell():
             return 0
         ###
     else:
-        logger.info("Have nothing to sell")
+        logger.info("Already in position")
 
 
 async def handle_buy():
@@ -159,7 +159,7 @@ async def handle_buy():
             return 0
         ###
     else:
-        logger.info("Already have")
+        logger.info("Already have enough")
 
 
 class Param(BaseModel):
@@ -170,10 +170,14 @@ app = FastAPI()
 
 
 @app.post("/")
-async def get_alert(alert: Any = Body(None)):
+async def get_alert(request: Request, alert: Any = Body(None)):
     global ii, unsuccessful_trade
-
-    logger.info("POST query ", alert)
+    
+    if alert == None:
+        logger.error("None alert " + str(await request.body()))
+        return
+    signal = alert.decode("ascii")
+    logger.info("POST query " + str(signal))
 
     if client.client == None:
         await client.ainit()
@@ -188,8 +192,7 @@ async def get_alert(alert: Any = Body(None)):
 
     with open("log.txt", "a") as f:
         f.write(str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "  " +
-                str(alert) + " :: " + str(bot_working) + "\n")
-    signal = alert.decode("ascii")
+                str(signal) + " :: " + str(bot_working) + "\n")
     res = None
     if bot_working:
         if (signal == 'BUY' and not inverted) or (signal == "SELL" and inverted):
