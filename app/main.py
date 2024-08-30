@@ -110,7 +110,7 @@ async def handle_sell():
         )
         try:
             quantity = (q_limit + position_quantity) / ii.lot
-
+            
             posted_order = await client.post_order(
                 order_id=str(uuid4()),
                 figi=figi,
@@ -119,6 +119,7 @@ async def handle_sell():
                 order_type=ORDER_TYPE_MARKET,
                 account_id=settings.account_id,
             )
+            logger.info(posted_order.lots_requested, posted_order.figi, posted_order.direction)
         except Exception as e:
             with open("log.txt", "a") as f:
                 f.write(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -150,6 +151,7 @@ async def handle_buy():
                 order_type=ORDER_TYPE_MARKET,
                 account_id=settings.account_id,
             )
+            logger.info(posted_order.lots_requested, posted_order.figi, posted_order.direction)
         except Exception as e:
             logger.error(
                 f"Failed to post buy order. figi={figi}. {e}")
@@ -177,7 +179,7 @@ async def get_alert(request: Request, alert: Any = Body(None)):
         logger.error("None alert " + str(await request.body()))
         return
     signal = alert.decode("ascii")
-    logger.info("POST query " + str(signal))
+    logger.info("POST query " + str(signal) + " " + str(inverted))
 
     if client.client == None:
         await client.ainit()
