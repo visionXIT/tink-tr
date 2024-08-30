@@ -119,7 +119,7 @@ async def handle_sell():
                 order_type=ORDER_TYPE_MARKET,
                 account_id=settings.account_id,
             )
-            logger.info(posted_order.lots_requested, posted_order.figi, posted_order.direction)
+            logger.info(str(posted_order.lots_requested) + " " + str(posted_order.figi) + " " + str(posted_order.direction))
         except Exception as e:
             with open("log.txt", "a") as f:
                 f.write(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -151,7 +151,7 @@ async def handle_buy():
                 order_type=ORDER_TYPE_MARKET,
                 account_id=settings.account_id,
             )
-            logger.info(posted_order.lots_requested, posted_order.figi, posted_order.direction)
+            logger.info(str(posted_order.lots_requested) + " " + str(posted_order.figi) + " " + str(posted_order.direction))
         except Exception as e:
             logger.error(
                 f"Failed to post buy order. figi={figi}. {e}")
