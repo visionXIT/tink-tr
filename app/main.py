@@ -2,6 +2,7 @@ import asyncio
 import copy
 import datetime
 import logging
+import random
 from typing import Annotated, Any
 from uuid import uuid4
 
@@ -69,6 +70,8 @@ showAllTrades = True
 
 unsuccessful_trade = None
 
+error = None
+
 
 def round2(r, g=2):
     return round(r, 3)
@@ -102,11 +105,12 @@ async def get_position_quantity() -> int:
     return int(quotation_to_float(position.quantity))
 
 
-async def handle_sell():
+async def handle_sell(id = "0"):
+    global error
     position_quantity = await get_position_quantity()
     if position_quantity > -q_limit:
         logger.info(
-            f"Selling {position_quantity} shares. figi={figi}"
+            id + f" Selling {position_quantity} shares. figi={figi}"
         )
         try:
             quantity = (q_limit + position_quantity) / ii.lot
@@ -119,29 +123,31 @@ async def handle_sell():
                 order_type=ORDER_TYPE_MARKET,
                 account_id=settings.account_id,
             )
-            logger.info(str(posted_order.lots_requested) + " " + str(posted_order.figi) + " " + str(posted_order.direction))
+            logger.info(id + " " + str(posted_order.lots_requested) + " " + str(posted_order.figi) + " " + str(posted_order.direction))
         except Exception as e:
+            error = str(e)
             with open("log.txt", "a") as f:
-                f.write(datetime.datetime.now().strftime("%Y-%m-%d %H:%M") +
+                f.write(id + " " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M") +
                         "    ERROR " + str(e) + "\n")
             logger.error(
-                f"Failed to post sell order. figi={figi}. {e}")
+                id + f" Failed to post sell order. figi={figi}. {e}")
             return 0
         ###
     else:
-        logger.info("Already in position")
+        logger.info(id + " Already in position")
 
 
-async def handle_buy():
+async def handle_buy(id = "0"):
+    global error
     position_quantity = await get_position_quantity()
     if position_quantity < q_limit:
         quantity_to_buy = q_limit - position_quantity
         logger.info(
-            f"Buying {quantity_to_buy} shares. figi={figi}"
+            id + f" Buying {quantity_to_buy} shares. figi={figi}"
         )
         try:
             quantity = quantity_to_buy / ii.lot
-            print(quantity, ii.lot, position_quantity)
+
             posted_order = await client.post_order(
                 order_id=str(uuid4()),
                 figi=figi,
@@ -150,17 +156,18 @@ async def handle_buy():
                 order_type=ORDER_TYPE_MARKET,
                 account_id=settings.account_id,
             )
-            logger.info(str(posted_order.lots_requested) + " " + str(posted_order.figi) + " " + str(posted_order.direction))
+            logger.info(id + " " + str(posted_order.lots_requested) + " " + str(posted_order.figi) + " " + str(posted_order.direction))
         except Exception as e:
+            error = e
             logger.error(
-                f"Failed to post buy order. figi={figi}. {e}")
+                id + f" Failed to post buy order. figi={figi}. {e}")
             with open("log.txt", "a") as f:
-                f.write(datetime.datetime.now().strftime("%Y-%m-%d %H:%M") +
+                f.write(id + " " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M") +
                         "    ERROR " + str(e) + "\n")
             return 0
         ###
     else:
-        logger.info("Already have enough")
+        logger.info(id + " Already have enough")
 
 
 class Param(BaseModel):
@@ -173,12 +180,12 @@ app = FastAPI()
 @app.post("/")
 async def get_alert(request: Request, alert: Any = Body(None)):
     global ii, unsuccessful_trade
-    
-    if alert == None:
+    id = str(random.randint(100, 10000))
+    if alert == None:   
         logger.error("None alert " + str(await request.body()))
         return
     signal = alert.decode("ascii")
-    logger.info("POST query " + str(signal) + " " + str(inverted))
+    logger.info(id + " POST query " + str(signal) + " " + str(inverted))
 
     if client.client == None:
         await client.ainit()
@@ -192,27 +199,29 @@ async def get_alert(request: Request, alert: Any = Body(None)):
                 return
 
     with open("log.txt", "a") as f:
-        f.write(str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "  " +
+        f.write(id + str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "  " +
                 str(signal) + " :: " + str(bot_working) + "\n")
     res = None
     if bot_working:
         if (signal == 'BUY' and not inverted) or (signal == "SELL" and inverted):
-            res = await handle_buy()
+            res = await handle_buy(id)
         elif (signal == 'SELL' and not inverted) or (signal == "BUY" and inverted):
-            res = await handle_sell()
+            res = await handle_sell(id)
+        else: 
+            logger.error("UNKNOWN SIGNAL " + signal)
     if res == 0:
         unsuccessful_trade = "BUY" if (signal == "BUY" and not inverted) or (
             signal == "SELL" and inverted) else "SELL"
-        logger.error("Unsucceful trade " + str(unsuccessful_trade))
+        logger.error(id + " Unsucceful trade " + str(unsuccessful_trade))
         with open("e.txt", "a") as f:
-            f.write(
+            f.write(id + " " + 
                 str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "  " +
-                str(unsuccessful_trade) + "\n"
-            )
-        asyncio.create_task(wait_for_trade())
+                str(unsuccessful_trade) + "\n")
+            
+        asyncio.create_task(wait_for_trade(id))
 
 
-async def wait_for_trade():
+async def wait_for_trade(id = "0"): 
     global unsuccessful_trade
     res = 0
     while unsuccessful_trade != None:
@@ -220,35 +229,35 @@ async def wait_for_trade():
         
         if now.hour == 14 and now.minute in range(0, 6):
             a = max(5 * 60 - now.minute * 60 - now.second + 1, 0)
-            logger.error("For " + str(a))
+            logger.error(id + " For " + str(a))
             await asyncio.sleep(a)
 
         elif (now.hour == 18 and now.minute >= 50):
             a = max(15 * 60 - (now.minute - 50) * 60 - now.second + 1, 0)
-            logger.error("For " + str(a))
+            logger.error(id + " For " + str(a))
 
             await asyncio.sleep(a)
 
         elif (now.hour == 19 and now.minute <= 5):
             a = max(5 * 60 - now.minute * 60 - now.second + 1, 0)
-            logger.error("For " + str(a))
+            logger.error(id + " For " + str(a))
 
             await asyncio.sleep(a)
 
         else:
             await asyncio.sleep(10)
 
-        logger.error("Waiting" + str(unsuccessful_trade))
+        logger.error(id + " Waiting " + str(unsuccessful_trade))
 
         if unsuccessful_trade == 'BUY':
-            res = await handle_buy()
+            res = await handle_buy(id)
             if res == None:
                 unsuccessful_trade = None
         elif unsuccessful_trade == 'SELL':
-            res = await handle_sell()
+            res = await handle_sell(id)
             if res == None:
                 unsuccessful_trade = None
-    logger.info("finished")
+    logger.info(id + " finished")
 
 
 @app.get("/check")
@@ -275,7 +284,7 @@ async def main(request: Request):
         await client.ainit()
     if ii == None:
         await prepare_data()
-
+    print(settings)
     port = await client.get_portfolio(account_id=settings.account_id)
     orders = await client.get_operations(account_id=settings.account_id,
                                          from_=datetime.datetime.now() - datetime.timedelta(days=num_trades),
@@ -284,7 +293,6 @@ async def main(request: Request):
     trades.reverse()
     orders.operations.reverse()
     opers = []
-
     if request.cookies.get("pass1"):
         auth = True
     else:
@@ -370,11 +378,12 @@ async def main(request: Request):
         "selected_type": selected_type,
         "unsuccessful_trade": unsuccessful_trade,
         "auth": auth if settings.password else True,
-        "show_all_trades": showAllTrades
+        "show_all_trades": showAllTrades,
+        "error": error
     }
     if not found_tickers or len(found_tickers) < 2:
         found_tickers = None
-
+    
     return templates.TemplateResponse(
         request=request, name="index.html", context=context
     )

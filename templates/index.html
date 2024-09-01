@@ -271,6 +271,7 @@
       <div class="block alert">
         <h3>Сделка не может быть исполнена в связи с ошибкой. Попытки повторить проводятся в авто-режиме</h3>
         <h3>Сигнал: {{ unsuccessful_trade }}</h3>
+        <p>Ошибка: {{ error }}</p>
         <form action="/break_waiting" method="get">
           <button type="submit">Отменить сделку</button>
         </form>
