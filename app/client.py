@@ -9,7 +9,7 @@ from tinkoff.invest import (
     InstrumentResponse,
 )
 from tinkoff.invest.async_services import AsyncServices
-from tinkoff.invest.services import MarketDataCache, Services
+from tinkoff.invest.services import Services
 
 from app.settings import settings
 
@@ -25,7 +25,6 @@ class TinkoffClient:
         self.sandbox = sandbox
         self.client: Optional[AsyncServices] = None
         self.sync_client: Optional[Services] = None
-        self.market_data_cache: Optional[MarketDataCache] = None
 
     async def ainit(self):
         self.client = await AsyncClient(token=self.token, app_name=settings.app_name).__aenter__()
