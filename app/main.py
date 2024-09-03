@@ -260,13 +260,6 @@ async def wait_for_trade(id = "0"):
     logger.info(id + " finished")
 
 
-@app.get("/check")
-async def health():
-    logger.info("check quiry")
-
-    return "working" if bot_working else "not working"
-
-
 @app.get("/break_waiting")
 async def break_waiting():
     global unsuccessful_trade
@@ -291,8 +284,9 @@ async def main(request: Request):
                                          to=datetime.datetime.now())
     trades, inc, p = calc_trades(copy.copy(orders.operations))
     trades.reverse()
+    
     orders.operations.reverse()
-    opers = []
+    
     if request.cookies.get("pass1"):
         auth = True
     else:
@@ -305,29 +299,6 @@ async def main(request: Request):
             if f[i].type in ["Покупка ценных бумаг", "Продажа ценных бумаг"]:
                 return f[i]
 
-    def get_first():
-        for i in opers:
-            if i.type in ["Покупка ценных бумаг", "Продажа ценных бумаг"]:
-                return i
-
-    inc = 0
-    for i in range(len(p)):
-        oper = p[i]
-        if oper.type == "Покупка ценных бумаг" or oper.type == "Продажа ценных бумаг":
-            if oper.quantity == q_limit or oper.quantity == q_limit * 2 or (get_last_q(i) and get_last_q(i).quantity / 2 + q_limit == oper.quantity):
-                opers.append(oper)
-                inc += quotation_to_float(oper.payment)
-        elif oper.type == "Списание вариационной маржи" or oper.type == "Зачисление вариационной маржи":
-            opers.append(oper)
-            inc += quotation_to_float(oper.payment)
-
-        elif oper.type == "Удержание комиссии за операцию":
-            if len(opers) > 0 and p[i - 1].id == opers[-1].id and opers[-1].quantity in [q_limit, q_limit * 2]:
-                opers.append(oper)
-                inc += quotation_to_float(oper.payment)
-    last = get_last_q(len(p))
-    if last and get_first() and last.type == get_first().type:
-        inc -= quotation_to_float(last.payment)
     opers = []
 
     for i in range(len(orders.operations)):
@@ -335,22 +306,19 @@ async def main(request: Request):
         if oper.type == "Покупка ценных бумаг" or oper.type == "Продажа ценных бумаг":
             if oper.quantity == q_limit or oper.quantity == q_limit * 2 or (get_last_q(i, 2) and get_last_q(i, 2).quantity / 2 + q_limit == oper.quantity):
                 opers.append(oper)
-                # inc += quotation_to_float(oper.payment)
         elif oper.type == "Списание вариационной маржи" or oper.type == "Зачисление вариационной маржи":
             opers.append(oper)
-            # inc += quotation_to_float(oper.payment)
 
         elif oper.type == "Удержание комиссии за операцию":
             if len(opers) > 0 and orders.operations[i - 1].id == opers[-1].id:
                 opers.append(oper)
-                # inc += quotation_to_float(oper.payment)
-        # print(inc, oper.date)
+        
 
-    opers.reverse()
+    
     if not showAllTrades:
         orders.operations = opers
-    else:
-        orders.operations.reverse()
+    orders.operations.reverse()
+        
     context = {
         "bot_working": bool(bot_working),
         "portfolio": port,
@@ -381,6 +349,7 @@ async def main(request: Request):
         "show_all_trades": showAllTrades,
         "error": error
     }
+    
     if not found_tickers or len(found_tickers) < 2:
         found_tickers = None
     
@@ -396,36 +365,43 @@ def calc_trades(trades):
     prev = None
     inc = 0
     num = 1
+    future_sum = 0
 
     def add_mark(prev, i, type):
-        nonlocal num, inc, p
-        inc += quotation_to_float(prev.payment) / 2 + \
-            quotation_to_float(i.payment) / 2
+        nonlocal num, p, future_sum
         res.append({
             "num": num,
             "timeStart": correct_timezone(i.date).strftime("%Y-%m-%d %H:%M"),
             "timeEnd": correct_timezone(prev.date).strftime("%Y-%m-%d %H:%M"),
             "type": type,
             "figi": i.figi,
-            "result": quotation_to_float(prev.payment) / 2 +
-            quotation_to_float(i.payment) / 2
+            "quantity": i.quantity,
+            "pt1": abs(quotation_to_float(prev.payment)) / quotation_to_float(prev.price) / prev.quantity,
+            "pt2": abs(quotation_to_float(i.payment)) / quotation_to_float(i.price) / i.quantity,
+            "result": quotation_to_float(prev.payment) + quotation_to_float(i.payment) + future_sum
         })
+        future_sum = 0
         num += 1
 
     for i in trades:
-        if i.type == "Покупка ценных бумаг" and i.quantity == q_limit * 2:
-            if prev != None and prev.figi == i.figi and prev.type == "Продажа ценных бумаг":
+        if i.type == "Покупка ценных бумаг":
+            if prev != None and prev.figi == i.figi and prev.type == "Продажа ценных бумаг" and prev.quantity == i.quantity:
                 add_mark(prev, i, "Short")
             prev = i
             p.append(prev)
-        elif i.type == "Продажа ценных бумаг" and i.quantity == q_limit * 2:
-            if prev != None and prev.figi == i.figi and prev.type == "Покупка ценных бумаг":
+        elif i.type == "Продажа ценных бумаг":
+            if prev != None and prev.figi == i.figi and prev.type == "Покупка ценных бумаг" and prev.quantity == i.quantity:
                 add_mark(prev, i, "Long")
             prev = i
             p.append(prev)
         elif i.type == "Удержание комиссии за операцию" or i.type == "Списание вариационной маржи" or i.type == "Зачисление вариационной маржи":
-            inc += quotation_to_float(i.payment)
+            if len(res) > 0 and i.type == "Удержание комиссии за операцию":
+                res[-1]["result"] += quotation_to_float(i.payment) 
+            else:
+                future_sum += quotation_to_float(i.payment)
             p.append(i)
+                
+    inc = sum([i["result"] for i in res])
 
     return res, inc, p
 

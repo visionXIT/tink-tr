@@ -225,8 +225,8 @@
       {% for trade in trades %}
         <div class="trade block">
           № {{ trade.num }}
-          <h3>Время покупки: {{ trade.timeStart }}</h3>
-          <h3>Время продажи: {{ trade.timeEnd }}</h3>
+          <h3>Время покупки: {{ trade.timeStart }}  по  {{ f.round(trade.pt1, 3) }}</h3>
+          <h3>Время продажи: {{ trade.timeEnd }}   по  {{ f.round(trade.pt2, 3) }}</h3>
           <h3>Тип: {{ trade.type }}</h3>
           <h3> 
             {% if figis2.get(trade.figi) %}
@@ -235,6 +235,7 @@
               FIGI: {{ trade.figi }}
             {% endif %}
           </h3>
+          <h3>Объем: {{ trade.quantity }}</h3>
           <h3>Заработок: {{ f.round(trade.result, 2) }}</h3>
         </div>
       {% endfor %}

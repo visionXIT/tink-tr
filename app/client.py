@@ -77,4 +77,4 @@ class TinkoffClient:
         return await self.client.instruments.find_instrument(**kwagrs)
 
 
-client = TinkoffClient(token=settings.token, sandbox=False)
+client = TinkoffClient(token=settings.token, sandbox=settings.sandbox)
