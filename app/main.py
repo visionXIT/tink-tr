@@ -33,6 +33,10 @@ from app.settings import settings
 logging.basicConfig(
     level=settings.log_level,
     format="[%(levelname)-5s] %(asctime)-19s %(name)s:%(lineno)d: %(message)s",
+    handlers=[
+        logging.FileHandler("log.txt"),
+        logging.StreamHandler()
+    ]
 )
 logging.getLogger("tinkoff").setLevel(settings.tinkoff_library_log_level)
 logger = logging.getLogger(__name__)
@@ -126,9 +130,6 @@ async def handle_sell(id = "0"):
             logger.info(id + " " + str(posted_order.lots_requested) + " " + str(posted_order.figi) + " " + str(posted_order.direction))
         except Exception as e:
             error = str(e)
-            with open("log.txt", "a") as f:
-                f.write(id + " " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M") +
-                        "    ERROR " + str(e) + "\n")
             logger.error(
                 id + f" Failed to post sell order. figi={figi}. {e}")
             return 0
@@ -161,9 +162,6 @@ async def handle_buy(id = "0"):
             error = e
             logger.error(
                 id + f" Failed to post buy order. figi={figi}. {e}")
-            with open("log.txt", "a") as f:
-                f.write(id + " " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M") +
-                        "    ERROR " + str(e) + "\n")
             return 0
         ###
     else:
@@ -198,9 +196,6 @@ async def get_alert(request: Request, alert: Any = Body(None)):
                 logger.error("Cannot prepare data")
                 return
 
-    with open("log.txt", "a") as f:
-        f.write(id + str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "  " +
-                str(signal) + " :: " + str(bot_working) + "\n")
     res = None
     if bot_working:
         if (signal == 'BUY' and not inverted) or (signal == "SELL" and inverted):
@@ -213,10 +208,6 @@ async def get_alert(request: Request, alert: Any = Body(None)):
         unsuccessful_trade = "BUY" if (signal == "BUY" and not inverted) or (
             signal == "SELL" and inverted) else "SELL"
         logger.error(id + " Unsucceful trade " + str(unsuccessful_trade))
-        with open("e.txt", "a") as f:
-            f.write(id + " " + 
-                str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "  " +
-                str(unsuccessful_trade) + "\n")
             
         asyncio.create_task(wait_for_trade(id))
 
@@ -277,7 +268,6 @@ async def main(request: Request):
         await client.ainit()
     if ii == None:
         await prepare_data()
-    print(settings)
     
     start_time = datetime.datetime.now() - datetime.timedelta(days=num_trades)
     start_time = start_time.replace(hour=0, minute=0)
@@ -422,10 +412,8 @@ async def changeShowAllTrades():
 async def make_trade(trade: Annotated[str, Form()]):
 
     if trade == "buy":
-        print("BUY")
         await handle_buy()
     elif trade == "sell":
-        print("SELL")
         await handle_sell()
 
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
