@@ -17,7 +17,7 @@ from tinkoff.invest.grpc.orders_pb2 import (
     ORDER_DIRECTION_BUY,
     ORDER_TYPE_MARKET,
 )
-
+from tinkoff.invest.grpc.operations_pb2 import OperationType
 
 from tinkoff.invest import InstrumentType
 
@@ -278,9 +278,13 @@ async def main(request: Request):
     if ii == None:
         await prepare_data()
     print(settings)
+    
+    start_time = datetime.datetime.now() - datetime.timedelta(days=num_trades)
+    start_time = start_time.replace(hour=0, minute=0)
+    
     port = await client.get_portfolio(account_id=settings.account_id)
     orders = await client.get_operations(account_id=settings.account_id,
-                                         from_=datetime.datetime.now() - datetime.timedelta(days=num_trades),
+                                         from_=start_time,
                                          to=datetime.datetime.now())
     trades, inc, p = calc_trades(copy.copy(orders.operations))
     trades.reverse()
@@ -296,20 +300,20 @@ async def main(request: Request):
         nonlocal opers, orders
         f = p if f == 1 else orders.operations
         for i in range(j - 1, -1, -1):
-            if f[i].type in ["Покупка ценных бумаг", "Продажа ценных бумаг"]:
+            if f[i].operation_type in [OperationType.OPERATION_TYPE_BUY, OperationType.OPERATION_TYPE_SELL]:
                 return f[i]
 
     opers = []
 
     for i in range(len(orders.operations)):
         oper = orders.operations[i]
-        if oper.type == "Покупка ценных бумаг" or oper.type == "Продажа ценных бумаг":
+        if oper.operation_type == OperationType.OPERATION_TYPE_BUY or oper.operation_type == OperationType.OPERATION_TYPE_SELL:
             if oper.quantity == q_limit or oper.quantity == q_limit * 2 or (get_last_q(i, 2) and get_last_q(i, 2).quantity / 2 + q_limit == oper.quantity):
                 opers.append(oper)
-        elif oper.type == "Списание вариационной маржи" or oper.type == "Зачисление вариационной маржи":
+        elif oper.operation_type == OperationType.OPERATION_TYPE_WRITING_OFF_VARMARGIN or oper.operation_type == OperationType.OPERATION_TYPE_ACCRUING_VARMARGIN:
             opers.append(oper)
 
-        elif oper.type == "Удержание комиссии за операцию":
+        elif oper.operation_type == OperationType.OPERATION_TYPE_BROKER_FEE:
             if len(opers) > 0 and orders.operations[i - 1].id == opers[-1].id:
                 opers.append(oper)
         
@@ -384,18 +388,18 @@ def calc_trades(trades):
         num += 1
 
     for i in trades:
-        if i.type == "Покупка ценных бумаг":
-            if prev != None and prev.figi == i.figi and prev.type == "Продажа ценных бумаг" and prev.quantity == i.quantity:
+        if i.operation_type == OperationType.OPERATION_TYPE_BUY:
+            if prev != None and prev.figi == i.figi and prev.operation_type == OperationType.OPERATION_TYPE_SELL and prev.quantity == i.quantity:
                 add_mark(prev, i, "Short")
             prev = i
             p.append(prev)
-        elif i.type == "Продажа ценных бумаг":
-            if prev != None and prev.figi == i.figi and prev.type == "Покупка ценных бумаг" and prev.quantity == i.quantity:
+        elif i.operation_type == OperationType.OPERATION_TYPE_SELL:
+            if prev != None and prev.figi == i.figi and prev.operation_type == OperationType.OPERATION_TYPE_BUY and prev.quantity == i.quantity:
                 add_mark(prev, i, "Long")
             prev = i
             p.append(prev)
-        elif i.type == "Удержание комиссии за операцию" or i.type == "Списание вариационной маржи" or i.type == "Зачисление вариационной маржи":
-            if len(res) > 0 and i.type == "Удержание комиссии за операцию":
+        elif i.operation_type == OperationType.OPERATION_TYPE_BROKER_FEE or i.operation_type == OperationType.OPERATION_TYPE_WRITING_OFF_VARMARGIN or i.operation_type == OperationType.OPERATION_TYPE_ACCRUING_VARMARGIN:
+            if len(res) > 0 and i.operation_type == OperationType.OPERATION_TYPE_BROKER_FEE:
                 res[-1]["result"] += quotation_to_float(i.payment) 
             else:
                 future_sum += quotation_to_float(i.payment)
