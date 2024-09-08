@@ -182,9 +182,9 @@ async def get_alert(request: Request, alert: Any = Body(None)):
     if alert == None:   
         logger.error("None alert " + str(await request.body()))
         return
-    signal = alert.decode("ascii")
+    signal = str(alert.decode("ascii"))
     logger.info(id + " POST query " + str(signal) + " " + str(inverted))
-
+    signal = signal.rstrip()
     if client.client == None:
         await client.ainit()
     if ii == None:
