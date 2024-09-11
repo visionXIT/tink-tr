@@ -76,6 +76,12 @@ unsuccessful_trade = None
 
 error = None
 
+work_on_time = False
+time_start = None
+time_end = None
+
+task_for_closing_position = None
+
 
 def round2(r, g=2):
     return round(r, 3)
@@ -91,7 +97,6 @@ async def prepare_data():
     try:
         ii = (
             await client.get_instrument(id_type=INSTRUMENT_ID_TYPE_FIGI, id=figi)
-            # await client.get_instrument(id_type=INSTRUMENT_ID_TYPE_ISIN)
         ).instrument
     except:
         return 0
@@ -166,6 +171,36 @@ async def handle_buy(id = "0"):
         ###
     else:
         logger.info(id + " Already have enough")
+        
+
+async def handle_close(id = "0"):
+    global error
+    position_quantity = await get_position_quantity()
+    if position_quantity != 0:
+        quantity_to_buy = -position_quantity
+        logger.info(
+            id + f" Closing {quantity_to_buy} shares. figi={figi}"
+        )
+        try:
+            quantity = quantity_to_buy / ii.lot
+
+            posted_order = await client.post_order(
+                order_id=str(uuid4()),
+                figi=figi,
+                direction=ORDER_DIRECTION_BUY if position_quantity > 0 else ORDER_DIRECTION_SELL,
+                quantity=int(quantity),
+                order_type=ORDER_TYPE_MARKET,
+                account_id=settings.account_id,
+            )
+            logger.info(id + " " + str(posted_order.lots_requested) + " " + str(posted_order.figi) + " " + str(posted_order.direction))
+        except Exception as e:
+            error = e
+            logger.error(
+                id + f" Failed to post close order. figi={figi}. {e}")
+            return 0
+        ###
+    else:
+        logger.info(id + " Already closed")
 
 
 class Param(BaseModel):
@@ -178,13 +213,17 @@ app = FastAPI()
 @app.post("/")
 async def get_alert(request: Request, alert: Any = Body(None)):
     global ii, unsuccessful_trade
+    
     id = str(random.randint(100, 10000))
+    
     if alert == None:   
         logger.error("None alert " + str(await request.body()))
         return
+    
     signal = str(alert.decode("ascii"))
     logger.info(id + " POST query " + str(signal) + " " + str(inverted))
     signal = signal.rstrip()
+    
     if client.client == None:
         await client.ainit()
     if ii == None:
@@ -197,7 +236,9 @@ async def get_alert(request: Request, alert: Any = Body(None)):
                 return
 
     res = None
-    if bot_working:
+    if bot_working and \
+        ((work_on_time and time_start <= datetime.datetime.now().time() <= time_end) or not work_on_time):
+            
         if (signal == 'BUY' and not inverted) or (signal == "SELL" and inverted):
             res = await handle_buy(id)
         elif (signal == 'SELL' and not inverted) or (signal == "BUY" and inverted):
@@ -210,6 +251,7 @@ async def get_alert(request: Request, alert: Any = Body(None)):
         logger.error(id + " Unsucceful trade " + str(unsuccessful_trade))
             
         asyncio.create_task(wait_for_trade(id))
+    
 
 
 async def wait_for_trade(id = "0"): 
@@ -249,7 +291,7 @@ async def wait_for_trade(id = "0"):
             if res == None:
                 unsuccessful_trade = None
     logger.info(id + " finished")
-
+    
 
 @app.get("/break_waiting")
 async def break_waiting():
@@ -341,7 +383,10 @@ async def main(request: Request):
         "unsuccessful_trade": unsuccessful_trade,
         "auth": auth if settings.password else True,
         "show_all_trades": showAllTrades,
-        "error": error
+        "error": error,
+        "time_start": time_start,
+        "time_end": time_end,
+        "work_on_time": work_on_time
     }
     
     if not found_tickers or len(found_tickers) < 2:
@@ -399,6 +444,48 @@ def calc_trades(trades):
 
     return res, inc, p
 
+@app.post("/change_work_on_time")
+async def change_work_on_time():
+    global work_on_time
+    work_on_time = not work_on_time
+    
+    return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
+async def wait_for_close():
+    print("F", datetime.datetime.now().time(), time_end)
+    if work_on_time and time_end != None and datetime.datetime.now().time() < time_end: 
+        t = None
+        try:
+            t = time_end.hour * 3600 + time_end.minute * 60 + time_end.second - datetime.datetime.now().time().hour * 3600 - datetime.datetime.now().time().minute * 60 - datetime.datetime.now().time().second 
+        except Exception as e:
+            print("Error", e)
+            await wait_for_close()
+            return
+        print("T", t)
+        await asyncio.sleep(t)
+    elif work_on_time and time_end != None and datetime.datetime.now().time() > time_end:
+        await asyncio.sleep((24 - datetime.datetime.now().time().hour) * 3600 + (60 - datetime.datetime.now().time().minute) * 60 + (60 - datetime.datetime.now().time().second) + 10 * 3600)
+        await wait_for_close()
+        return
+
+    # await handle_close()
+    print("waited")
+    await asyncio.sleep(60)
+    await wait_for_close()
+    
+@app.post("/change_time")
+async def change_time(ts: Annotated[datetime.time, Form()] = None, te: Annotated[datetime.time, Form()] = None):
+    global time_start, time_end, task_for_closing_position
+    time_start = ts
+    time_end = te
+    
+    if task_for_closing_position:
+        task_for_closing_position.cancel()
+    
+    task_for_closing_position = asyncio.create_task(wait_for_close())
+    
+    return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
 
 @app.post("/change_show_all_trades")
 async def changeShowAllTrades():
@@ -410,11 +497,13 @@ async def changeShowAllTrades():
 
 @app.post("/make_trade")
 async def make_trade(trade: Annotated[str, Form()]):
-
+    print(trade)
     if trade == "buy":
         await handle_buy()
     elif trade == "sell":
         await handle_sell()
+    elif trade == "close":
+        await handle_close()
 
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 

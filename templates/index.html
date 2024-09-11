@@ -120,7 +120,27 @@
           </button>
         </form>
       </div>
-      
+
+        <h3>Работает по времени: {{ "Да" if work_on_time else "Нет" }}</h3>
+        <form action="/change_work_on_time" method="post">
+          <button type="submit">
+            {{ "Выключить" if work_on_time else "Включить" }}
+          </button>
+        </form>
+        <form action="/change_time" method="post">
+          <p>
+            <label for="ts">Начало периода: </label>
+            <input type="time" name="ts" value="{{ time_start }}">
+          </p>
+          <p>
+          <label for="te">Конец периода: </label>
+          <input type="time" name="te" value="{{ time_end }}">
+          </p>
+          <button type="submit">
+            Изменить период
+          </button>
+        </form>
+      <br>
       <form action="/change_k" method="post">
         Торгует: 
         <select name="k">
@@ -251,6 +271,7 @@
         <select name="trade" id="trade">
           <option value="buy">Купить</option>
           <option value="sell">Продать</option>
+          <option value="close">Закрыть позицию</option>
         </select>
         <button id="trySubmitButton">Совершить сделку</button>
         <div class="hidden" id="confirmTrade">
