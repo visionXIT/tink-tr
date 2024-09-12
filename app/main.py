@@ -238,7 +238,7 @@ async def get_alert(request: Request, alert: Any = Body(None)):
     res = None
     logger.info(str(id) + " " + str(work_on_time) + " " + str(time_start) + " " + str(time_end))
     if bot_working and \
-        ((work_on_time and time_start and time_end and time_start <= datetime.datetime.now().time() <= time_end) or not work_on_time):
+        ((work_on_time and time_start and time_end and time_start <= correct_timezone(datetime.datetime.now()).time() <= time_end) or not work_on_time):
 
         if (signal == 'BUY' and not inverted) or (signal == "SELL" and inverted):
             res = await handle_buy(id)
@@ -261,7 +261,7 @@ async def wait_for_trade(id = "0"):
     global unsuccessful_trade
     res = 0
     while unsuccessful_trade != None:
-        now = datetime.datetime.now()
+        now = correct_timezone(datetime.datetime.now())
         
         if now.hour == 14 and now.minute in range(0, 6):
             a = max(5 * 60 - now.minute * 60 - now.second + 1, 0)
@@ -456,11 +456,13 @@ async def change_work_on_time():
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
 async def wait_for_close():
-    print("WAITING", datetime.datetime.now().time(), time_end, time_start)
-    if work_on_time and time_end != None and datetime.datetime.now().time() < time_end: 
+    now = correct_timezone(datetime.datetime.now()).time()
+    print("WAITING", now, time_end, time_start)
+
+    if work_on_time and time_end != None and now < time_end: 
         t = None
         try:
-            t = time_end.hour * 3600 + time_end.minute * 60 + time_end.second - datetime.datetime.now().time().hour * 3600 - datetime.datetime.now().time().minute * 60 - datetime.datetime.now().time().second 
+            t = time_end.hour * 3600 + time_end.minute * 60 + time_end.second - now.hour * 3600 - now.minute * 60 - now.second 
         except Exception as e:
             print("Error", e)
             await asyncio.sleep(10)
@@ -468,9 +470,9 @@ async def wait_for_close():
             return
         print("WAITING FOR ", t)
         await asyncio.sleep(t)
-    elif work_on_time and time_end != None and datetime.datetime.now().time() > time_end:
+    elif work_on_time and time_end != None and now > time_end:
         print("WAITING 2")
-        await asyncio.sleep((24 - datetime.datetime.now().time().hour) * 3600 + (60 - datetime.datetime.now().time().minute) * 60 + (60 - datetime.datetime.now().time().second) + 10 * 3600)
+        await asyncio.sleep((24 - now.hour) * 3600 + (60 - now.minute) * 60 + (60 - now.second) + 10 * 3600)
         await wait_for_close()
         return
 
