@@ -236,15 +236,18 @@ async def get_alert(request: Request, alert: Any = Body(None)):
                 return
 
     res = None
+    logger.info(str(id) + " " + str(work_on_time) + " " + str(time_start) + " " + str(time_end))
     if bot_working and \
         ((work_on_time and time_start and time_end and time_start <= datetime.datetime.now().time() <= time_end) or not work_on_time):
-            
+
         if (signal == 'BUY' and not inverted) or (signal == "SELL" and inverted):
             res = await handle_buy(id)
+            logger.info(str(id) + " BUY")
         elif (signal == 'SELL' and not inverted) or (signal == "BUY" and inverted):
             res = await handle_sell(id)
+            logger.info(str(id) + " SELL")
         else: 
-            logger.error("UNKNOWN SIGNAL " + signal)
+            logger.error(str(id) + " UNKNOWN SIGNAL " + signal)
     if res == 0:
         unsuccessful_trade = "BUY" if (signal == "BUY" and not inverted) or (
             signal == "SELL" and inverted) else "SELL"
