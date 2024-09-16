@@ -456,8 +456,16 @@ async def change_work_on_time():
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
 async def wait_for_close():
+    global task_for_closing_position
     now = correct_timezone(datetime.datetime.now()).time()
+    
+    if time_end == None:
+        task_for_closing_position.cancel()
+        return
+    
     print("WAITING", now, time_end, time_start)
+    
+    
 
     if work_on_time and time_end != None and now < time_end: 
         t = None
