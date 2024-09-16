@@ -498,7 +498,8 @@ async def change_time(ts: Annotated[datetime.time, Form()] = None, te: Annotated
     if task_for_closing_position:
         task_for_closing_position.cancel()
     
-    task_for_closing_position = asyncio.create_task(wait_for_close())
+    if time_end:
+        task_for_closing_position = asyncio.create_task(wait_for_close())
     
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
