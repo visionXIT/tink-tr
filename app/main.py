@@ -409,43 +409,32 @@ def calc_trades(trades):
     inc = 0
     num = 1
     future_sum = 0
-    need_to_sub = 0
 
     def add_mark(prev, i, type):
         nonlocal num, p, future_sum
         res.append({
             "num": num,
-            "timeStart": (correct_timezone(i.date).strftime("%Y-%m-%d %H:%M") if i != None else "")
-                if type == "Short" or type == "SHORT"
-                else (correct_timezone(prev.date).strftime("%Y-%m-%d %H:%M") if prev != None else ""),
-            "timeEnd": (correct_timezone(prev.date).strftime("%Y-%m-%d %H:%M") if prev != None else "") 
-                if type == "Short"  or type == "SHORT"
-                else (correct_timezone(i.date).strftime("%Y-%m-%d %H:%M") if i != None else ""),
+            "timeStart": correct_timezone(i.date).strftime("%Y-%m-%d %H:%M"),
+            "timeEnd": correct_timezone(prev.date).strftime("%Y-%m-%d %H:%M"),
             "type": type,
             "figi": i.figi,
             "quantity": i.quantity,
-            "pt1": (abs(quotation_to_float(prev.payment)) / quotation_to_float(prev.price) / prev.quantity if prev != None else 0),
+            "pt1": abs(quotation_to_float(prev.payment)) / quotation_to_float(prev.price) / prev.quantity,
             "pt2": abs(quotation_to_float(i.payment)) / quotation_to_float(i.price) / i.quantity,
-            "result": (quotation_to_float(prev.payment) if prev != None else 0) + quotation_to_float(i.payment) + future_sum
+            "result": quotation_to_float(prev.payment) + quotation_to_float(i.payment) + future_sum
         })
         future_sum = 0
         num += 1
 
     for i in trades:
         if i.operation_type == OperationType.OPERATION_TYPE_BUY:
-            if prev != None and prev.figi == i.figi and prev.operation_type == OperationType.OPERATION_TYPE_SELL:
+            if prev != None and prev.figi == i.figi and prev.operation_type == OperationType.OPERATION_TYPE_SELL and prev.quantity == i.quantity:
                 add_mark(prev, i, "Short")
-            elif prev != None and prev.operation_type == OperationType.OPERATION_TYPE_BUY:
-                print("FF")
-                add_mark(None, prev, "BUY")
             prev = i
             p.append(prev)
         elif i.operation_type == OperationType.OPERATION_TYPE_SELL:
-            if prev != None and prev.figi == i.figi and prev.operation_type == OperationType.OPERATION_TYPE_BUY:
+            if prev != None and prev.figi == i.figi and prev.operation_type == OperationType.OPERATION_TYPE_BUY and prev.quantity == i.quantity:
                 add_mark(prev, i, "Long")
-            elif prev != None and prev.operation_type == OperationType.OPERATION_TYPE_SELL:
-                print("GG")
-                add_mark(None, prev, "SELL")
             prev = i
             p.append(prev)
         elif i.operation_type == OperationType.OPERATION_TYPE_BROKER_FEE or i.operation_type == OperationType.OPERATION_TYPE_WRITING_OFF_VARMARGIN or i.operation_type == OperationType.OPERATION_TYPE_ACCRUING_VARMARGIN:
