@@ -244,7 +244,10 @@ async def get_alert(request: Request, alert: Any = Body(None)):
     res = None
     logger.info(str(id) + " " + str(work_on_time) + " " + str(time_start) + " " + str(time_end))
     if bot_working and \
-        ((work_on_time and time_start and time_end and time_start <= correct_timezone(datetime.datetime.now()).time() <= time_end) or not work_on_time):
+        ((work_on_time and time_start and time_end and ( \
+            (time_start < time_end and time_start <= correct_timezone(datetime.datetime.now()).time() <= time_end) \
+            or (time_start > time_end and (time_start <= correct_timezone(datetime.datetime.now()).time() or correct_timezone(datetime.datetime.now()).time() <= time_end))
+            )) or not work_on_time):
 
         if (signal == 'BUY' and not inverted) or (signal == "SELL" and inverted):
             res = await handle_buy(id)
