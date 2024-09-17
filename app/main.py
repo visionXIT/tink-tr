@@ -41,47 +41,53 @@ logging.basicConfig(
 logging.getLogger("tinkoff").setLevel(settings.tinkoff_library_log_level)
 logger = logging.getLogger(__name__)
 
-KOT = {
-    "SBER": "BBG004730N88",
-    "RUB": "RUB000UTSTOM",
-    "SRU4": "FUTSBRF09240",
-    "NGQ4": "FUTNG0824000"
-}
+import sqlite3
+con = sqlite3.connect("trading.db")
+cur = con.cursor()
+quotes = cur.execute("SELECT * FROM quoutes").fetchall()
+settings_bot = cur.execute("SELECT * FROM settings LIMIT 1").fetchone()
+cur.close()
 
-KOT2 = {
-    "BBG004730N88": "SBER",
-    "RUB000UTSTOM": "RUB",
-    "FUTSBRF09240": "SRU4",
-    "FUTNG0824000": "NGQ4"
-}
+KOT = dict()
+KOT2 = dict()
 
+for q in quotes:
+    KOT[q[0]] = q[1]
+    KOT2[q[1]] = q[0]
 
-figi = KOT["NGQ4"]
-figi_name = "NGQ4"
+figi = KOT.get(settings_bot[6])
+figi_name = settings_bot[6]
 ii = None
 
-q_limit = 1
+q_limit = settings_bot[1]
 auth = None
 
 templates = Jinja2Templates(directory='templates')
-num_trades = 3
+num_trades = 10
 add_ticker = None
 found_tickers = None
 selected_type = None
 bot_working = True
-inverted = False
+inverted = True if settings_bot[2] == 1 else False
 showAllTrades = True
 
 unsuccessful_trade = None
 
 error = None
 
-work_on_time = False
-time_start = None
-time_end = None
+work_on_time = True if settings_bot[3] == 1 else False
+time_start = settings_bot[4]
+time_end = settings_bot[5]
 
 task_for_closing_position = None
+#modern c
 
+
+def save_settings():
+    cur = con.cursor()
+    cur.execute("UPDATE settings SET lot=?, inverted=?, work_on_time=?, start_work=?, end_work=? WHERE id = 1", (q_limit, 1 if inverted else 0, 1 if work_on_time else 0, str(time_start), str(time_end)))
+    con.commit()
+    cur.close()
 
 def round2(r, g=2):
     return round(r, 3)
@@ -452,6 +458,7 @@ def calc_trades(trades):
 async def change_work_on_time():
     global work_on_time
     work_on_time = not work_on_time
+    save_settings()
     
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
@@ -494,6 +501,7 @@ async def change_time(ts: Annotated[datetime.time, Form()] = None, te: Annotated
     global time_start, time_end, task_for_closing_position
     time_start = ts
     time_end = te
+    save_settings()
     
     if task_for_closing_position:
         task_for_closing_position.cancel()
@@ -544,16 +552,15 @@ async def change_num_trade(num: Annotated[int, Form()]):
 def ch():
     global inverted
     inverted = not inverted
+    save_settings()
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
 
 @app.post("/change")
 async def change():
     global bot_working
-
-    logger.info("change query")
-
     bot_working = not bot_working
+    save_settings()
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
 
@@ -588,11 +595,15 @@ async def change_k(ticker: Annotated[str, Form()], type: Annotated[str, Form()])
     res = await client.find_instrument(query=ticker, instrument_kind=i_type, api_trade_available_flag=True)
 
     found_tickers = res.instruments
-    if len(found_tickers) == 1:
+    if len(found_tickers) == 1 and KOT.get(found_tickers[0].ticker) == None:
         KOT[found_tickers[0].ticker] = found_tickers[0].figi
         KOT2[found_tickers[0].figi] = found_tickers[0].ticker
         add_ticker = None
         selected_type = None
+        cur = con.cursor()
+        cur.execute(f"INSERT INTO quoutes(name, figi) VALUES('{found_tickers[0].ticker}', '{found_tickers[0].figi}')")
+        con.commit()
+        cur.close()
 
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
@@ -612,6 +623,8 @@ async def change(q: Annotated[str, Form()]):
     logger.info("change query")
 
     q_limit = float(q)
+    
+    save_settings()
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
 
@@ -621,4 +634,5 @@ async def change(k: Annotated[str, Form()]):
 
     figi = k
     figi_name = KOT2[figi]
+    save_settings()
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
