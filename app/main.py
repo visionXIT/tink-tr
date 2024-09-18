@@ -76,8 +76,8 @@ unsuccessful_trade = None
 error = None
 
 work_on_time = True if settings_bot[3] == 1 else False
-time_start = settings_bot[4]
-time_end = settings_bot[5]
+time_start = datetime.time.fromisoformat(settings_bot[4]) if settings_bot[4] and settings_bot[4] != "None" else None
+time_end = datetime.time.fromisoformat(settings_bot[5]) if settings_bot[5] and settings_bot[5] != "None" else None
 
 task_for_closing_position = None
 #modern c
