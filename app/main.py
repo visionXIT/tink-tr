@@ -552,7 +552,7 @@ async def change_num_trade(num: Annotated[int, Form()]):
 
 
 @app.post('/change_inv')
-def ch():
+async def ch():
     global inverted
     inverted = not inverted
     save_settings()
@@ -620,10 +620,8 @@ async def check_client():
 
 
 @app.post("/change_q")
-async def change(q: Annotated[str, Form()]):
+async def changeq(q: Annotated[str, Form()]):
     global q_limit
-
-    logger.info("change query")
 
     q_limit = float(q)
     
@@ -632,7 +630,7 @@ async def change(q: Annotated[str, Form()]):
 
 
 @app.post("/change_k")
-async def change(k: Annotated[str, Form()]):
+async def changek(k: Annotated[str, Form()]):
     global figi, figi_name
 
     figi = k
