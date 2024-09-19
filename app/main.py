@@ -123,7 +123,7 @@ if time_end:
 
 def save_settings():
     cur = con.cursor()
-    cur.execute("UPDATE settings SET lot=?, inverted=?, work_on_time=?, start_work=?, end_work=? WHERE id = 1", (q_limit, 1 if inverted else 0, 1 if work_on_time else 0, str(time_start), str(time_end)))
+    cur.execute("UPDATE settings SET lot=?, inverted=?, work_on_time=?, start_work=?, end_work=?, set_q=? WHERE id = 1", (q_limit, 1 if inverted else 0, 1 if work_on_time else 0, str(time_start), str(time_end), figi_name))
     con.commit()
     cur.close()
 
