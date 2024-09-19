@@ -80,6 +80,44 @@ time_start = datetime.time.fromisoformat(settings_bot[4]) if settings_bot[4] and
 time_end = datetime.time.fromisoformat(settings_bot[5]) if settings_bot[5] and settings_bot[5] != "None" else None
 
 task_for_closing_position = None
+
+
+async def wait_for_close():
+    global task_for_closing_position
+    now = correct_timezone(datetime.datetime.now()).time()
+    
+    if time_end == None:
+        task_for_closing_position.cancel()
+        return
+    
+    print("WAITING", now, time_end, time_start)
+    
+    
+
+    if work_on_time and time_end != None and now < time_end: 
+        t = None
+        try:
+            t = time_end.hour * 3600 + time_end.minute * 60 + time_end.second - now.hour * 3600 - now.minute * 60 - now.second 
+        except Exception as e:
+            print("Error", e)
+            await asyncio.sleep(10)
+            await wait_for_close()
+            return
+        print("WAITING FOR ", t)
+        await asyncio.sleep(t)
+    elif work_on_time and time_end != None and now > time_end:
+        print("WAITING 2")
+        await asyncio.sleep((24 - now.hour) * 3600 + (60 - now.minute) * 60 + (60 - now.second) + 10 * 3600)
+        await wait_for_close()
+        return
+
+    await handle_close()
+    print("waited")
+    await asyncio.sleep(60)
+    await wait_for_close()
+
+if time_end:
+        task_for_closing_position = asyncio.create_task(wait_for_close())
 #modern c
 
 
@@ -465,39 +503,6 @@ async def change_work_on_time():
     
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
-async def wait_for_close():
-    global task_for_closing_position
-    now = correct_timezone(datetime.datetime.now()).time()
-    
-    if time_end == None:
-        task_for_closing_position.cancel()
-        return
-    
-    print("WAITING", now, time_end, time_start)
-    
-    
-
-    if work_on_time and time_end != None and now < time_end: 
-        t = None
-        try:
-            t = time_end.hour * 3600 + time_end.minute * 60 + time_end.second - now.hour * 3600 - now.minute * 60 - now.second 
-        except Exception as e:
-            print("Error", e)
-            await asyncio.sleep(10)
-            await wait_for_close()
-            return
-        print("WAITING FOR ", t)
-        await asyncio.sleep(t)
-    elif work_on_time and time_end != None and now > time_end:
-        print("WAITING 2")
-        await asyncio.sleep((24 - now.hour) * 3600 + (60 - now.minute) * 60 + (60 - now.second) + 10 * 3600)
-        await wait_for_close()
-        return
-
-    await handle_close()
-    print("waited")
-    await asyncio.sleep(60)
-    await wait_for_close()
     
 @app.post("/change_time")
 async def change_time(ts: Annotated[datetime.time, Form()] = None, te: Annotated[datetime.time, Form()] = None):
