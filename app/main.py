@@ -92,7 +92,6 @@ async def wait_for_close():
     
     print("WAITING", now, time_end, time_start)
     
-    
 
     if work_on_time and time_end != None and now < time_end: 
         t = None
@@ -105,13 +104,14 @@ async def wait_for_close():
             return
         print("WAITING FOR ", t)
         await asyncio.sleep(t)
+        await handle_close()
     elif work_on_time and time_end != None and now > time_end:
         print("WAITING 2")
         await asyncio.sleep((24 - now.hour) * 3600 + (60 - now.minute) * 60 + (60 - now.second) + 10 * 3600)
         await wait_for_close()
         return
 
-    await handle_close()
+
     print("waited")
     await asyncio.sleep(60)
     await wait_for_close()
@@ -285,7 +285,7 @@ async def get_alert(request: Request, alert: Any = Body(None)):
         ((work_on_time and time_start and time_end and ( \
             (time_start < time_end and time_start <= correct_timezone(datetime.datetime.now()).time() <= time_end) \
             or (time_start > time_end and (time_start <= correct_timezone(datetime.datetime.now()).time() or correct_timezone(datetime.datetime.now()).time() <= time_end))
-            )) or not work_on_time):
+            )) or not work_on_time or not time_start or not time_end):
 
         if (signal == 'BUY' and not inverted) or (signal == "SELL" and inverted):
             res = await handle_buy(id)
