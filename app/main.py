@@ -90,7 +90,7 @@ async def wait_for_close():
         task_for_closing_position.cancel()
         return
     
-    print("WAITING", now, time_end, time_start)
+    print("WAITING", now, time_end, time_start, now < time_end, work_on_time)
     
 
     if work_on_time and time_end != None and now < time_end: 
