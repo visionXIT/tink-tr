@@ -1,3 +1,4 @@
+import sqlite3
 import asyncio
 import copy
 import datetime
@@ -41,7 +42,6 @@ logging.basicConfig(
 logging.getLogger("tinkoff").setLevel(settings.tinkoff_library_log_level)
 logger = logging.getLogger(__name__)
 
-import sqlite3
 con = sqlite3.connect("trading.db")
 cur = con.cursor()
 quotes = cur.execute("SELECT * FROM quoutes").fetchall()
@@ -76,8 +76,10 @@ unsuccessful_trade = None
 error = None
 
 work_on_time = True if settings_bot[3] == 1 else False
-time_start = datetime.time.fromisoformat(settings_bot[4]) if settings_bot[4] and settings_bot[4] != "None" else None
-time_end = datetime.time.fromisoformat(settings_bot[5]) if settings_bot[5] and settings_bot[5] != "None" else None
+time_start = datetime.time.fromisoformat(
+    settings_bot[4]) if settings_bot[4] and settings_bot[4] != "None" else None
+time_end = datetime.time.fromisoformat(
+    settings_bot[5]) if settings_bot[5] and settings_bot[5] != "None" else None
 
 task_for_closing_position = None
 
@@ -85,47 +87,52 @@ task_for_closing_position = None
 async def wait_for_close():
     global task_for_closing_position
     now = correct_timezone(datetime.datetime.now()).time()
-    
+
     if time_end == None:
         task_for_closing_position.cancel()
         return
-    
-    print("WAITING", now, time_end, time_start, now < time_end, work_on_time)
-    
 
-    if work_on_time and time_end != None and now < time_end: 
+    print("WAITING", now, time_end, time_start, work_on_time)
+
+    if work_on_time and time_end != None and now < time_end:
         t = None
         try:
-            t = time_end.hour * 3600 + time_end.minute * 60 + time_end.second - now.hour * 3600 - now.minute * 60 - now.second 
+            t = time_end.hour * 3600 + time_end.minute * 60 + \
+                time_end.second - now.hour * 3600 - now.minute * 60 - now.second
         except Exception as e:
             print("Error", e)
             await asyncio.sleep(10)
             await wait_for_close()
             return
         print("WAITING FOR ", t)
+
         await asyncio.sleep(t)
-        await handle_close()
+        print("::", now, time_end, time_start, work_on_time)
+
+        if work_on_time:
+            await handle_close()
     elif work_on_time and time_end != None and now > time_end:
         print("WAITING 2")
         await asyncio.sleep((24 - now.hour) * 3600 + (60 - now.minute) * 60 + (60 - now.second) + 10 * 3600)
         await wait_for_close()
         return
 
-
     print("waited")
     await asyncio.sleep(60)
     await wait_for_close()
 
 if time_end:
-        task_for_closing_position = asyncio.create_task(wait_for_close())
-#modern c
+    task_for_closing_position = asyncio.create_task(wait_for_close())
+# modern c
 
 
 def save_settings():
     cur = con.cursor()
-    cur.execute("UPDATE settings SET lot=?, inverted=?, work_on_time=?, start_work=?, end_work=?, set_q=? WHERE id = 1", (q_limit, 1 if inverted else 0, 1 if work_on_time else 0, str(time_start), str(time_end), figi_name))
+    cur.execute("UPDATE settings SET lot=?, inverted=?, work_on_time=?, start_work=?, end_work=?, set_q=? WHERE id = 1",
+                (q_limit, 1 if inverted else 0, 1 if work_on_time else 0, str(time_start), str(time_end), figi_name))
     con.commit()
     cur.close()
+
 
 def round2(r, g=2):
     return round(r, 3)
@@ -158,7 +165,7 @@ async def get_position_quantity() -> int:
     return int(quotation_to_float(position.quantity))
 
 
-async def handle_sell(id = "0"):
+async def handle_sell(id="0"):
     global error
     position_quantity = await get_position_quantity()
     if position_quantity > -q_limit:
@@ -167,7 +174,7 @@ async def handle_sell(id = "0"):
         )
         try:
             quantity = (q_limit + position_quantity) / ii.lot
-            
+
             posted_order = await client.post_order(
                 order_id=str(uuid4()),
                 figi=figi,
@@ -176,7 +183,8 @@ async def handle_sell(id = "0"):
                 order_type=ORDER_TYPE_MARKET,
                 account_id=settings.account_id,
             )
-            logger.info(id + " " + str(posted_order.lots_requested) + " " + str(posted_order.figi) + " " + str(posted_order.direction))
+            logger.info(id + " " + str(posted_order.lots_requested) + " " +
+                        str(posted_order.figi) + " " + str(posted_order.direction))
         except Exception as e:
             error = str(e)
             logger.error(
@@ -187,7 +195,7 @@ async def handle_sell(id = "0"):
         logger.info(id + " Already in position")
 
 
-async def handle_buy(id = "0"):
+async def handle_buy(id="0"):
     global error
     position_quantity = await get_position_quantity()
     if position_quantity < q_limit:
@@ -206,7 +214,8 @@ async def handle_buy(id = "0"):
                 order_type=ORDER_TYPE_MARKET,
                 account_id=settings.account_id,
             )
-            logger.info(id + " " + str(posted_order.lots_requested) + " " + str(posted_order.figi) + " " + str(posted_order.direction))
+            logger.info(id + " " + str(posted_order.lots_requested) + " " +
+                        str(posted_order.figi) + " " + str(posted_order.direction))
         except Exception as e:
             error = e
             logger.error(
@@ -215,9 +224,9 @@ async def handle_buy(id = "0"):
         ###
     else:
         logger.info(id + " Already have enough")
-        
 
-async def handle_close(id = "0"):
+
+async def handle_close(id="0"):
     global error
     position_quantity = await get_position_quantity()
     if position_quantity != 0:
@@ -236,7 +245,8 @@ async def handle_close(id = "0"):
                 order_type=ORDER_TYPE_MARKET,
                 account_id=settings.account_id,
             )
-            logger.info(id + " " + str(posted_order.lots_requested) + " " + str(posted_order.figi) + " " + str(posted_order.direction))
+            logger.info(id + " " + str(posted_order.lots_requested) + " " +
+                        str(posted_order.figi) + " " + str(posted_order.direction))
         except Exception as e:
             error = e
             logger.error(
@@ -257,17 +267,17 @@ app = FastAPI()
 @app.post("/")
 async def get_alert(request: Request, alert: Any = Body(None)):
     global ii, unsuccessful_trade
-    
+
     id = str(random.randint(100, 10000))
-    
-    if alert == None:   
+
+    if alert == None:
         logger.error("None alert " + str(await request.body()))
         return
-    
+
     signal = str(alert.decode("ascii"))
     logger.info(id + " POST query " + str(signal) + " " + str(inverted))
     signal = signal.rstrip()
-    
+
     if client.client == None:
         await client.ainit()
     if ii == None:
@@ -280,11 +290,13 @@ async def get_alert(request: Request, alert: Any = Body(None)):
                 return
 
     res = None
-    logger.info(str(id) + " " + str(work_on_time) + " " + str(time_start) + " " + str(time_end))
+    logger.info(str(id) + " " + str(work_on_time) + " " +
+                str(time_start) + " " + str(time_end))
     if bot_working and \
-        ((work_on_time and time_start and time_end and ( \
-            (time_start < time_end and time_start <= correct_timezone(datetime.datetime.now()).time() <= time_end) \
-            or (time_start > time_end and (time_start <= correct_timezone(datetime.datetime.now()).time() or correct_timezone(datetime.datetime.now()).time() <= time_end))
+            ((work_on_time and time_start and time_end and (
+                (time_start < time_end and time_start <= correct_timezone(
+                    datetime.datetime.now()).time() <= time_end)
+                or (time_start > time_end and (time_start <= correct_timezone(datetime.datetime.now()).time() or correct_timezone(datetime.datetime.now()).time() <= time_end))
             )) or not work_on_time or not time_start or not time_end):
 
         if (signal == 'BUY' and not inverted) or (signal == "SELL" and inverted):
@@ -293,27 +305,26 @@ async def get_alert(request: Request, alert: Any = Body(None)):
         elif (signal == 'SELL' and not inverted) or (signal == "BUY" and inverted):
             res = await handle_sell(id)
             logger.info(str(id) + " SELL")
-        else: 
+        else:
             logger.error(str(id) + " UNKNOWN SIGNAL " + signal)
     if res == 0:
         unsuccessful_trade = "BUY" if (signal == "BUY" and not inverted) or (
             signal == "SELL" and inverted) else "SELL"
         logger.error(id + " Unsucceful trade " + str(unsuccessful_trade))
-            
+
         asyncio.create_task(wait_for_trade(id))
-    
 
 
-async def wait_for_trade(id = "0"): 
+async def wait_for_trade(id="0"):
     global unsuccessful_trade
     res = 0
     while unsuccessful_trade != None:
         now = correct_timezone(datetime.datetime.now())
-        
+
         if now.hour == 14 and now.minute in range(0, 6):
             a = max(5 * 60 - now.minute * 60 - now.second + 1, 0)
             logger.error(id + " For " + str(a))
-            
+
             await asyncio.sleep(a)
 
         elif (now.hour == 18 and now.minute >= 50):
@@ -342,7 +353,7 @@ async def wait_for_trade(id = "0"):
             if res == None:
                 unsuccessful_trade = None
     logger.info(id + " finished")
-    
+
 
 @app.get("/break_waiting")
 async def break_waiting():
@@ -361,19 +372,19 @@ async def main(request: Request):
         await client.ainit()
     if ii == None:
         await prepare_data()
-    
+
     start_time = datetime.datetime.now() - datetime.timedelta(days=num_trades)
     start_time = start_time.replace(hour=0, minute=0)
-    
+
     port = await client.get_portfolio(account_id=settings.account_id)
     orders = await client.get_operations(account_id=settings.account_id,
                                          from_=start_time,
                                          to=datetime.datetime.now())
     trades, inc, p = calc_trades(copy.copy(orders.operations))
     trades.reverse()
-    
+
     orders.operations.reverse()
-    
+
     if request.cookies.get("pass1"):
         auth = True
     else:
@@ -399,13 +410,11 @@ async def main(request: Request):
         elif oper.operation_type == OperationType.OPERATION_TYPE_BROKER_FEE:
             if len(opers) > 0 and orders.operations[i - 1].id == opers[-1].id:
                 opers.append(oper)
-        
 
-    
     if not showAllTrades:
         orders.operations = opers
     orders.operations.reverse()
-        
+
     context = {
         "bot_working": bool(bot_working),
         "portfolio": port,
@@ -439,10 +448,10 @@ async def main(request: Request):
         "time_end": time_end,
         "work_on_time": work_on_time
     }
-    
+
     if not found_tickers or len(found_tickers) < 2:
         found_tickers = None
-    
+
     return templates.TemplateResponse(
         request=request, name="index.html", context=context
     )
@@ -486,37 +495,38 @@ def calc_trades(trades):
             p.append(prev)
         elif i.operation_type == OperationType.OPERATION_TYPE_BROKER_FEE or i.operation_type == OperationType.OPERATION_TYPE_WRITING_OFF_VARMARGIN or i.operation_type == OperationType.OPERATION_TYPE_ACCRUING_VARMARGIN:
             if len(res) > 0 and i.operation_type == OperationType.OPERATION_TYPE_BROKER_FEE:
-                res[-1]["result"] += quotation_to_float(i.payment) 
+                res[-1]["result"] += quotation_to_float(i.payment)
             else:
                 future_sum += quotation_to_float(i.payment)
             p.append(i)
-                
+
     inc = sum([i["result"] for i in res])
 
     return res, inc, p
+
 
 @app.post("/change_work_on_time")
 async def change_work_on_time():
     global work_on_time
     work_on_time = not work_on_time
     save_settings()
-    
+
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
-    
+
 @app.post("/change_time")
 async def change_time(ts: Annotated[datetime.time, Form()] = None, te: Annotated[datetime.time, Form()] = None):
     global time_start, time_end, task_for_closing_position
     time_start = ts
     time_end = te
     save_settings()
-    
+
     if task_for_closing_position:
         task_for_closing_position.cancel()
-    
+
     if time_end:
         task_for_closing_position = asyncio.create_task(wait_for_close())
-    
+
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
 
@@ -609,7 +619,8 @@ async def change_k(ticker: Annotated[str, Form()], type: Annotated[str, Form()])
         add_ticker = None
         selected_type = None
         cur = con.cursor()
-        cur.execute(f"INSERT INTO quoutes(name, figi) VALUES('{found_tickers[0].ticker}', '{found_tickers[0].figi}')")
+        cur.execute(
+            f"INSERT INTO quoutes(name, figi) VALUES('{found_tickers[0].ticker}', '{found_tickers[0].figi}')")
         con.commit()
         cur.close()
 
@@ -631,7 +642,7 @@ async def change1(q: Annotated[str, Form()]):
     logger.info("change query")
 
     q_limit = float(q)
-    
+
     save_settings()
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
