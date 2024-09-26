@@ -85,7 +85,7 @@ task_for_closing_position = None
 
 
 async def wait_for_close():
-    global task_for_closing_position
+    global task_for_closing_position, unsuccessful_trade
     now = correct_timezone(datetime.datetime.now()).time()
 
     if time_end == None:
@@ -110,7 +110,13 @@ async def wait_for_close():
         print("::", now, time_end, time_start, work_on_time)
 
         if work_on_time:
-            await handle_close()
+            res = await handle_close()
+            if res == 0:
+                unsuccessful_trade = 'CLOSE'
+                logger.error(id + " Unsucceful trade " +
+                             str(unsuccessful_trade))
+                asyncio.create_task(wait_for_trade(id))
+
     elif work_on_time and time_end != None and now > time_end:
         print("WAITING 2")
         await asyncio.sleep((24 - now.hour) * 3600 + (60 - now.minute) * 60 + (60 - now.second) + 10 * 3600)
@@ -350,6 +356,10 @@ async def wait_for_trade(id="0"):
                 unsuccessful_trade = None
         elif unsuccessful_trade == 'SELL':
             res = await handle_sell(id)
+            if res == None:
+                unsuccessful_trade = None
+        elif unsuccessful_trade == 'CLOSE':
+            res = await handle_close(id)
             if res == None:
                 unsuccessful_trade = None
     logger.info(id + " finished")
