@@ -495,12 +495,12 @@ def calc_trades(trades):
 
     for i in trades:
         if i.operation_type == OperationType.OPERATION_TYPE_BUY:
-            if prev != None and prev.figi == i.figi and prev.operation_type == OperationType.OPERATION_TYPE_SELL and prev.quantity == i.quantity:
+            if prev != None and prev.figi == i.figi and prev.operation_type == OperationType.OPERATION_TYPE_SELL:
                 add_mark(prev, i, "Short")
             prev = i
             p.append(prev)
         elif i.operation_type == OperationType.OPERATION_TYPE_SELL:
-            if prev != None and prev.figi == i.figi and prev.operation_type == OperationType.OPERATION_TYPE_BUY and prev.quantity == i.quantity:
+            if prev != None and prev.figi == i.figi and prev.operation_type == OperationType.OPERATION_TYPE_BUY:
                 add_mark(prev, i, "Long")
             prev = i
             p.append(prev)
