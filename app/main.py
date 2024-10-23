@@ -88,7 +88,7 @@ async def wait_for_close():
     global task_for_closing_position, unsuccessful_trade
     now = correct_timezone(datetime.datetime.now()).time()
 
-    if time_end == None:
+    if time_end == None or not work_on_time:
         task_for_closing_position.cancel()
         return
 
