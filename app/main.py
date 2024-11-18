@@ -116,7 +116,7 @@ async def wait_for_close():
                 unsuccessful_trade = 'CLOSE'
                 logger.error(" Unsucceful trade " +
                              str(unsuccessful_trade))
-                asyncio.create_task(wait_for_trade(0))
+                await wait_for_trade(0)
 
     elif work_on_time and time_end != None and now > time_end:
         print("WAITING 2")
