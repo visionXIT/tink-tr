@@ -4,6 +4,7 @@ import copy
 import datetime
 import logging
 import random
+from turtle import pos
 from typing import Annotated, Any
 from uuid import uuid4
 
@@ -70,6 +71,8 @@ selected_type = None
 bot_working = True
 inverted = True if settings_bot[2] == 1 else False
 showAllTrades = True
+piramid = False
+maxAmount = 0
 
 unsuccessful_trade = None
 
@@ -175,12 +178,25 @@ async def get_position_quantity() -> int:
 async def handle_sell(id="0"):
     global error
     position_quantity = await get_position_quantity()
-    if position_quantity > -q_limit:
-        logger.info(
-            id + f" Selling {position_quantity} shares. figi={figi}"
-        )
+
+    if (piramid and position_quantity > -maxAmount) or (not piramid and position_quantity > -q_limit):
+
         try:
-            quantity = (q_limit + position_quantity) / ii.lot
+            if piramid:
+                quantity = q_limit if position_quantity - q_limit > - \
+                    maxAmount else (maxAmount + position_quantity)
+
+                if position_quantity > 0:
+                    quantity = position_quantity + \
+                        (q_limit if q_limit < maxAmount else maxAmount)
+
+                quantity /= ii.lot
+            else:
+                quantity = (q_limit + position_quantity) / ii.lot
+
+            logger.info(
+                id + f" Selling {quantity} shares. figi={figi}"
+            )
 
             posted_order = await client.post_order(
                 order_id=str(uuid4()),
@@ -190,6 +206,7 @@ async def handle_sell(id="0"):
                 order_type=ORDER_TYPE_MARKET,
                 account_id=settings.account_id,
             )
+
             logger.info(id + " " + str(posted_order.lots_requested) + " " +
                         str(posted_order.figi) + " " + str(posted_order.direction))
         except Exception as e:
@@ -205,13 +222,25 @@ async def handle_sell(id="0"):
 async def handle_buy(id="0"):
     global error
     position_quantity = await get_position_quantity()
-    if position_quantity < q_limit:
-        quantity_to_buy = q_limit - position_quantity
-        logger.info(
-            id + f" Buying {quantity_to_buy} shares. figi={figi}"
-        )
+
+    if (not piramid and position_quantity < q_limit) or (piramid and position_quantity < maxAmount):
+
         try:
-            quantity = quantity_to_buy / ii.lot
+            if piramid:
+                quantity = q_limit if position_quantity + \
+                    q_limit < maxAmount else (maxAmount - position_quantity)
+
+                if position_quantity < 0:
+                    quantity = -position_quantity + \
+                        (q_limit if q_limit < maxAmount else maxAmount)
+
+            else:
+                quantity = q_limit - position_quantity
+            quantity /= ii.lot
+
+            logger.info(
+                id + f" Buying {quantity} shares. figi={figi}"
+            )
 
             posted_order = await client.post_order(
                 order_id=str(uuid4()),
@@ -221,6 +250,7 @@ async def handle_buy(id="0"):
                 order_type=ORDER_TYPE_MARKET,
                 account_id=settings.account_id,
             )
+
             logger.info(id + " " + str(posted_order.lots_requested) + " " +
                         str(posted_order.figi) + " " + str(posted_order.direction))
         except Exception as e:
@@ -252,6 +282,7 @@ async def handle_close(id="0"):
                 order_type=ORDER_TYPE_MARKET,
                 account_id=settings.account_id,
             )
+
             logger.info(id + " " + str(posted_order.lots_requested) + " " +
                         str(posted_order.figi) + " " + str(posted_order.direction))
         except Exception as e:
@@ -457,7 +488,9 @@ async def main(request: Request):
         "error": error,
         "time_start": time_start,
         "time_end": time_end,
-        "work_on_time": work_on_time
+        "work_on_time": work_on_time,
+        "maxam": maxAmount,
+        "piramid": piramid
     }
 
     if not found_tickers or len(found_tickers) < 2:
@@ -574,6 +607,20 @@ async def passs(s: Annotated[str, Form()], response: Response):
 async def change_num_trade(num: Annotated[int, Form()]):
     global num_trades
     num_trades = num
+    return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
+
+@app.post("/change_pir")
+async def change_pir():
+    global piramid
+    piramid = not piramid
+    return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
+
+@app.post("/change_max_am")
+async def change_maxam(maxam: Annotated[int, Form()]):
+    global maxAmount
+    maxAmount = maxam
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
 
