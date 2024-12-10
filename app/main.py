@@ -4,7 +4,6 @@ import copy
 import datetime
 import logging
 import random
-from turtle import pos
 from typing import Annotated, Any
 from uuid import uuid4
 
