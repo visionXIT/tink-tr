@@ -12,6 +12,7 @@ from tinkoff.invest.async_services import AsyncServices
 from tinkoff.invest.services import Services
 
 from app.settings import settings
+from app.utils.quotation import quotation_to_float
 
 
 class TinkoffClient:
@@ -75,6 +76,11 @@ class TinkoffClient:
 
     async def find_instrument(self, **kwagrs):
         return await self.client.instruments.find_instrument(**kwagrs)
+
+    async def get_last_price(self, figi):
+        prices = await self.client.market_data.get_last_prices(figi=[figi])
+        print(prices)
+        return quotation_to_float(prices.last_prices[0].price)
 
 
 client = TinkoffClient(token=settings.token, sandbox=settings.sandbox)

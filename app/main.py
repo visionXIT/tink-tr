@@ -1,3 +1,4 @@
+import logging.handlers
 import sqlite3
 import asyncio
 import copy
@@ -28,14 +29,47 @@ from app.settings import settings
 from app.utils.portfolio import get_position
 from app.utils.quotation import quotation_to_float
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 
 from app.settings import settings
+
+schedule = AsyncIOScheduler()
+
+
+@schedule.scheduled_job('interval', seconds=10)
+async def check_stop_loss():
+    global last_order_price, last_order
+
+    logger.debug("CHECK STOP LOSS START")
+    if stop_loss_diff == 0 or not stop_loss:
+        logger.debug("STOP LOSS IS DISABLED")
+        return
+    if last_order:
+        current_price = await client.get_last_price(figi)
+        logger.debug(
+            f"CURRENT PRICE {current_price}, LAST ORDER PRICE {last_order_price}, STOP LOSS DIFF {stop_loss_diff}")
+        if last_order.direction == ORDER_DIRECTION_BUY and last_order_price - current_price > stop_loss_diff:
+            await handle_sell("STOP LOSS FROM BUY")
+            logger.info(f"STOP LOSS {datetime.datetime.now()}")
+            last_order_price = current_price
+            last_order = None
+        elif last_order.direction == ORDER_DIRECTION_SELL and current_price - last_order_price > stop_loss_diff:
+            await handle_buy("STOP LOSS FROM SELL")
+            logger.info(f"STOP LOSS {datetime.datetime.now()}")
+            last_order_price = current_price
+            last_order = None
+    logger.debug("CHECK STOP LOSS END")
+
+schedule.start()
+
 
 logging.basicConfig(
     level=settings.log_level,
     format="[%(levelname)-5s] %(asctime)-19s %(name)s:%(lineno)d: %(message)s",
     handlers=[
-        logging.FileHandler("log.txt"),
+        logging.handlers.TimedRotatingFileHandler(
+            "log.txt", when="midnight", interval=3),
         logging.StreamHandler()
     ]
 )
@@ -72,6 +106,11 @@ inverted = True if settings_bot[2] == 1 else False
 showAllTrades = True
 piramid = False
 maxAmount = 0
+stop_loss = False
+stop_loss_diff = 0
+
+last_order_price = 0
+last_order = None
 
 unsuccessful_trade = None
 
@@ -94,7 +133,7 @@ async def wait_for_close():
         task_for_closing_position.cancel()
         return
 
-    print("WAITING", now, time_end, time_start, work_on_time)
+    logger.debug(f"WAITING {now}, {time_end}, {time_start}, {work_on_time}")
 
     if work_on_time and time_end != None and now < time_end:
         t = None
@@ -102,14 +141,14 @@ async def wait_for_close():
             t = time_end.hour * 3600 + time_end.minute * 60 + \
                 time_end.second - now.hour * 3600 - now.minute * 60 - now.second
         except Exception as e:
-            print("Error", e)
+            logger.error(f"Error {e}")
             await asyncio.sleep(10)
             await wait_for_close()
             return
-        print("WAITING FOR ", t)
+        logger.debug(f"WAITING FOR {t}")
 
         await asyncio.sleep(t)
-        print("::", now, time_end, time_start, work_on_time)
+        logger.debug(f":: {now}, {time_end}, {time_start}, {work_on_time}")
 
         if work_on_time:
             res = await handle_close()
@@ -121,12 +160,12 @@ async def wait_for_close():
                 await wait_for_trade(0)
 
     elif work_on_time and time_end != None and now > time_end:
-        print("WAITING 2")
+        logger.debug("WAITING 2")
         await asyncio.sleep((24 - now.hour) * 3600 + (60 - now.minute) * 60 + (60 - now.second) + 10 * 3600)
         await wait_for_close()
         return
 
-    print("waited")
+    logger.debug("waited")
     await asyncio.sleep(60)
     await wait_for_close()
 
@@ -153,7 +192,7 @@ def correct_timezone(date):
 
 async def prepare_data():
     global ii
-    print("prepared")
+    logger.debug("prepared")
     try:
         ii = (
             await client.get_instrument(id_type=INSTRUMENT_ID_TYPE_FIGI, id=figi)
@@ -175,7 +214,8 @@ async def get_position_quantity() -> int:
 
 
 async def handle_sell(id="0"):
-    global error
+    global error, last_order_price, last_order
+    logger.debug("HANDLE SELL START")
     position_quantity = await get_position_quantity()
 
     if (piramid and position_quantity > -maxAmount) or (not piramid and position_quantity > -q_limit):
@@ -206,6 +246,9 @@ async def handle_sell(id="0"):
                 account_id=settings.account_id,
             )
 
+            last_order_price = posted_order.executed_order_price
+            last_order = posted_order
+
             logger.info(id + " " + str(posted_order.lots_requested) + " " +
                         str(posted_order.figi) + " " + str(posted_order.direction))
         except Exception as e:
@@ -216,10 +259,12 @@ async def handle_sell(id="0"):
         ###
     else:
         logger.info(id + " Already in position")
+    logger.debug("HANDLE SELL END")
 
 
 async def handle_buy(id="0"):
-    global error
+    global error, last_order_price, last_order
+    logger.debug("HANDLE BUY START")
     position_quantity = await get_position_quantity()
 
     if (not piramid and position_quantity < q_limit) or (piramid and position_quantity < maxAmount):
@@ -252,6 +297,9 @@ async def handle_buy(id="0"):
 
             logger.info(id + " " + str(posted_order.lots_requested) + " " +
                         str(posted_order.figi) + " " + str(posted_order.direction))
+
+            last_order_price = posted_order.executed_order_price
+            last_order = posted_order
         except Exception as e:
             error = e
             logger.error(
@@ -260,10 +308,12 @@ async def handle_buy(id="0"):
         ###
     else:
         logger.info(id + " Already have enough")
+    logger.debug("HANDLE BUY END")
 
 
 async def handle_close(id="0"):
-    global error
+    global error, last_order_price, last_order
+    logger.debug("HANDLE CLOSE START")
     position_quantity = await get_position_quantity()
     if position_quantity != 0:
         quantity_to_buy = abs(position_quantity)
@@ -282,6 +332,9 @@ async def handle_close(id="0"):
                 account_id=settings.account_id,
             )
 
+            last_order_price = None
+            last_order = None
+
             logger.info(id + " " + str(posted_order.lots_requested) + " " +
                         str(posted_order.figi) + " " + str(posted_order.direction))
         except Exception as e:
@@ -292,6 +345,7 @@ async def handle_close(id="0"):
         ###
     else:
         logger.info(id + " Already closed")
+    logger.debug("HANDLE CLOSE END")
 
 
 class Param(BaseModel):
@@ -489,7 +543,9 @@ async def main(request: Request):
         "time_end": time_end,
         "work_on_time": work_on_time,
         "maxam": maxAmount,
-        "piramid": piramid
+        "piramid": piramid,
+        "stop_loss": stop_loss,
+        "stop_loss_diff": stop_loss_diff
     }
 
     if not found_tickers or len(found_tickers) < 2:
@@ -581,9 +637,23 @@ async def changeShowAllTrades():
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
 
+@app.post("/change_stop_loss")
+async def changeStopLoss():
+    global stop_loss
+
+    stop_loss = not stop_loss
+    return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
+
+@app.post("/change_stop_loss_diff")
+async def changeStopLossDiff(diff: Annotated[float, Form()]):
+    global stop_loss_diff
+    stop_loss_diff = diff
+    return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
+
 @app.post("/make_trade")
 async def make_trade(trade: Annotated[str, Form()]):
-    print(trade)
     if trade == "buy":
         await handle_buy()
     elif trade == "sell":
@@ -695,8 +765,6 @@ async def check_client():
 @app.post("/change_q")
 async def change1(q: Annotated[str, Form()]):
     global q_limit
-
-    logger.info("change query")
 
     q_limit = float(q)
 

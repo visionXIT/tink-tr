@@ -178,6 +178,31 @@
       </div>
 
       {% endif %}
+
+      {% if (stop_loss) %}
+      <h1>Стоп-лосс включен</h1>
+      {% else %}
+      <h1>Стоп-лосс выключен</h1>
+      {% endif %}
+        <form action="/change_stop_loss" method="post">
+          <button type="submit">
+            Вкл/Выкл
+          </button>
+        </form>
+      {% if stop_loss %}
+
+      <div class="block" style="background-color: aliceblue;">
+        <form action="/change_stop_loss_diff" method="post">
+          <label for="diff">Размер стоп-лосса: </label>
+          <input type="text" value="{{stop_loss_diff}}" name="diff">
+          
+          <button type="submit" style="margin-top: 10px;">
+            Изменить размер стоп-лосса
+          </button>
+        </form>
+      </div>
+
+      {% endif %}
       <h3>Добавить новую котироку</h3>
       <form action="/add_k" method="post" id="add_k">
         <label for="ticker">Тикер: </label>
