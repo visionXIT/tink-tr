@@ -12,3 +12,4 @@ log.txt
 e.txt
 trading.db
 log.*
+.DS_Store
