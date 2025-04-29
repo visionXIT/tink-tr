@@ -213,18 +213,20 @@ async def handle_operation(type: Literal["BUY", "SELL", "CLOSE"], id="0"):
     logger.debug(f"Handling operation {type} id: {id}")
     global last_order_price
 
-    current_price = await client.get_last_price(figi)
-    last_order_price = current_price
-
     if type == "BUY":
-        return await handle_buy(id)
+        res = await handle_buy(id)
     elif type == "SELL":
-        return await handle_sell(id)
+        res = await handle_sell(id)
     elif type == "CLOSE":
-        return await handle_close(id)
+        res = await handle_close(id)
     else:
         logger.error(f"Unknown operation type: {type}")
         return 0
+
+    if res is None:
+        current_price = await client.get_last_price(figi)
+        last_order_price = current_price
+    return res
 
 
 async def handle_sell(id="0"):
@@ -260,8 +262,6 @@ async def handle_sell(id="0"):
                 account_id=settings.account_id,
             )
 
-            last_order_price = quotation_to_float(
-                posted_order.executed_order_price)
             last_order = posted_order
 
             logger.info(id + " " + str(posted_order.lots_requested) + " " +
@@ -313,8 +313,6 @@ async def handle_buy(id="0"):
             logger.info(id + " " + str(posted_order.lots_requested) + " " +
                         str(posted_order.figi) + " " + str(posted_order.direction))
 
-            last_order_price = quotation_to_float(
-                posted_order.executed_order_price)
             last_order = posted_order
         except Exception as e:
             error = e
