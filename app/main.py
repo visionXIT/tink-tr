@@ -246,7 +246,8 @@ async def handle_sell(id="0"):
                 account_id=settings.account_id,
             )
 
-            last_order_price = posted_order.executed_order_price
+            last_order_price = quotation_to_float(
+                posted_order.executed_order_price)
             last_order = posted_order
 
             logger.info(id + " " + str(posted_order.lots_requested) + " " +
@@ -298,7 +299,8 @@ async def handle_buy(id="0"):
             logger.info(id + " " + str(posted_order.lots_requested) + " " +
                         str(posted_order.figi) + " " + str(posted_order.direction))
 
-            last_order_price = posted_order.executed_order_price
+            last_order_price = quotation_to_float(
+                posted_order.executed_order_price)
             last_order = posted_order
         except Exception as e:
             error = e
