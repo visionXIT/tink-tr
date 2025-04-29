@@ -5,7 +5,7 @@ import copy
 import datetime
 import logging
 import random
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import uuid4
 
 from fastapi import Body, FastAPI, Form, Request, Response
@@ -45,20 +45,16 @@ async def check_stop_loss():
     if stop_loss_diff == 0 or not stop_loss:
         logger.debug("STOP LOSS IS DISABLED")
         return
-    if last_order:
+    if last_order_price:
         current_price = await client.get_last_price(figi)
         logger.debug(
             f"CURRENT PRICE {current_price}, LAST ORDER PRICE {last_order_price}, STOP LOSS DIFF {stop_loss_diff}")
         if last_order.direction == ORDER_DIRECTION_BUY and last_order_price - current_price > stop_loss_diff:
-            await handle_sell("STOP LOSS FROM BUY")
+            await handle_operation("SELL", "STOP LOSS FROM BUY")
             logger.info(f"STOP LOSS {datetime.datetime.now()}")
-            last_order_price = current_price
-            last_order = None
         elif last_order.direction == ORDER_DIRECTION_SELL and current_price - last_order_price > stop_loss_diff:
-            await handle_buy("STOP LOSS FROM SELL")
+            await handle_operation("BUY", "STOP LOSS FROM SELL")
             logger.info(f"STOP LOSS {datetime.datetime.now()}")
-            last_order_price = current_price
-            last_order = None
     logger.debug("CHECK STOP LOSS END")
 
 schedule.start()
@@ -151,7 +147,7 @@ async def wait_for_close():
         logger.debug(f":: {now}, {time_end}, {time_start}, {work_on_time}")
 
         if work_on_time:
-            res = await handle_close()
+            res = await handle_operation("CLOSE")
             logger.error(res)
             if res == 0:
                 unsuccessful_trade = 'CLOSE'
@@ -171,7 +167,6 @@ async def wait_for_close():
 
 if time_end:
     task_for_closing_position = asyncio.create_task(wait_for_close())
-# modern c
 
 
 def save_settings():
@@ -192,12 +187,13 @@ def correct_timezone(date):
 
 async def prepare_data():
     global ii
-    logger.debug("prepared")
+    logger.debug("Instrument data preparation")
     try:
         ii = (
             await client.get_instrument(id_type=INSTRUMENT_ID_TYPE_FIGI, id=figi)
         ).instrument
-    except:
+    except Exception as e:
+        logger.error(f"Failed to prepare instrument data: {e}")
         return 0
 
 
@@ -211,6 +207,24 @@ async def get_position_quantity() -> int:
     if position is None:
         return 0
     return int(quotation_to_float(position.quantity))
+
+
+async def handle_operation(type: Literal["BUY", "SELL", "CLOSE"], id="0"):
+    logger.debug(f"Handling operation {type} id: {id}")
+    global last_order_price
+
+    current_price = await client.get_last_price(figi)
+    last_order_price = current_price
+
+    if type == "BUY":
+        return await handle_buy(id)
+    elif type == "SELL":
+        return await handle_sell(id)
+    elif type == "CLOSE":
+        return await handle_close(id)
+    else:
+        logger.error(f"Unknown operation type: {type}")
+        return 0
 
 
 async def handle_sell(id="0"):
@@ -393,10 +407,10 @@ async def get_alert(request: Request, alert: Any = Body(None)):
             )) or not work_on_time or not time_start or not time_end):
 
         if (signal == 'BUY' and not inverted) or (signal == "SELL" and inverted):
-            res = await handle_buy(id)
+            res = await handle_operation("BUY", id)
             logger.info(str(id) + " BUY")
         elif (signal == 'SELL' and not inverted) or (signal == "BUY" and inverted):
-            res = await handle_sell(id)
+            res = await handle_operation("SELL", id)
             logger.info(str(id) + " SELL")
         else:
             logger.error(str(id) + " UNKNOWN SIGNAL " + signal)
@@ -438,15 +452,15 @@ async def wait_for_trade(id="0"):
         logger.error(id + " Waiting " + str(unsuccessful_trade))
 
         if unsuccessful_trade == 'BUY':
-            res = await handle_buy(id)
+            res = await handle_operation("BUY", id)
             if res == None:
                 unsuccessful_trade = None
         elif unsuccessful_trade == 'SELL':
-            res = await handle_sell(id)
+            res = await handle_operation("SELL", id)
             if res == None:
                 unsuccessful_trade = None
         elif unsuccessful_trade == 'CLOSE':
-            res = await handle_close(id)
+            res = await handle_operation("CLOSE", id)
             if res == None:
                 unsuccessful_trade = None
     logger.info(id + " finished")
@@ -657,11 +671,11 @@ async def changeStopLossDiff(diff: Annotated[float, Form()]):
 @app.post("/make_trade")
 async def make_trade(trade: Annotated[str, Form()]):
     if trade == "buy":
-        await handle_buy()
+        await handle_operation("BUY")
     elif trade == "sell":
-        await handle_sell()
+        await handle_operation("SELL")
     elif trade == "close":
-        await handle_close()
+        await handle_operation("CLOSE")
 
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
