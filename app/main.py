@@ -64,8 +64,8 @@ logging.basicConfig(
     level=settings.log_level,
     format="[%(levelname)-5s] %(asctime)-19s %(name)s:%(lineno)d: %(message)s",
     handlers=[
-        logging.handlers.TimedRotatingFileHandler(
-            "log.txt", when="midnight", interval=3),
+        logging.handlers.RotatingFileHandler(
+            "log.txt", maxBytes=5 * 1024),
         logging.StreamHandler()
     ]
 )
