@@ -202,6 +202,19 @@
         </form>
       </div>
 
+      <div class="block" style="background-color: aliceblue;">
+        {% if stop_loss_closes_position %}
+        <h3>Стоп-лосс закрывает позицию</h3>
+        {% else %}
+        <h3>Стоп-лосс открывает противоположную позицию</h3>
+        {% endif %}
+        <form action="/change_stop_loss_closes_position" method="post">
+          <button type="submit">
+            Переключить
+          </button>
+        </form>
+      </div>
+
       {% endif %}
       <h3>Добавить новую котироку</h3>
       <form action="/add_k" method="post" id="add_k">

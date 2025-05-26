@@ -50,10 +50,10 @@ async def check_stop_loss():
         logger.debug(
             f"CURRENT PRICE {current_price}, LAST ORDER PRICE {last_order_price}, STOP LOSS DIFF {stop_loss_diff}")
         if last_order.direction == ORDER_DIRECTION_BUY and last_order_price - current_price > stop_loss_diff:
-            await handle_operation("SELL", "STOP LOSS FROM BUY")
+            await handle_operation("SELL" if not stop_loss_closes_position else "CLOSE", "STOP LOSS FROM BUY")
             logger.info(f"STOP LOSS {datetime.datetime.now()}")
         elif last_order.direction == ORDER_DIRECTION_SELL and current_price - last_order_price > stop_loss_diff:
-            await handle_operation("BUY", "STOP LOSS FROM SELL")
+            await handle_operation("BUY" if not stop_loss_closes_position else "CLOSE", "STOP LOSS FROM SELL")
             logger.info(f"STOP LOSS {datetime.datetime.now()}")
     logger.debug("CHECK STOP LOSS END")
 
@@ -104,6 +104,8 @@ piramid = False
 maxAmount = 0
 stop_loss = False
 stop_loss_diff = 0
+
+stop_loss_closes_position = False
 
 last_order_price = 0
 last_order = None
@@ -559,7 +561,8 @@ async def main(request: Request):
         "maxam": maxAmount,
         "piramid": piramid,
         "stop_loss": stop_loss,
-        "stop_loss_diff": stop_loss_diff
+        "stop_loss_diff": stop_loss_diff,
+        "stop_loss_closes_position": stop_loss_closes_position
     }
 
     if not found_tickers or len(found_tickers) < 2:
@@ -648,6 +651,14 @@ async def changeShowAllTrades():
     global showAllTrades
 
     showAllTrades = not showAllTrades
+    return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
+
+@app.post("/change_stop_loss_closes_position")
+async def changeStopLossClosesPosition():
+    global stop_loss_closes_position
+
+    stop_loss_closes_position = not stop_loss_closes_position
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
 
