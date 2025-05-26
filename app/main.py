@@ -1,4 +1,5 @@
 import logging.handlers
+import os
 import sqlite3
 import asyncio
 import copy
@@ -56,6 +57,11 @@ async def check_stop_loss():
             await handle_operation("BUY" if not stop_loss_closes_position else "CLOSE", "STOP LOSS FROM SELL")
             logger.info(f"STOP LOSS {datetime.datetime.now()}")
     logger.debug("CHECK STOP LOSS END")
+
+
+@schedule.scheduled_job('interval', hours=24)
+async def remove_log_file():
+    os.remove("log.txt")
 
 schedule.start()
 
