@@ -79,8 +79,40 @@ class TinkoffClient:
 
     async def get_last_price(self, figi):
         prices = await self.client.market_data.get_last_prices(figi=[figi])
-        print(prices)
         return quotation_to_float(prices.last_prices[0].price)
+
+    async def get_operations_for_period(self, account_id: str, start_date, end_date):
+        """Get operations for a specific period with proper error handling"""
+        try:
+            return await self.get_operations(
+                account_id=account_id,
+                from_=start_date,
+                to=end_date
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(
+                f"Failed to get operations for period {start_date} to {end_date}: {e}")
+            return None
+
+    async def get_historical_data(self, account_id: str, days: int = 30):
+        """Get historical operations data for the specified number of days"""
+        import datetime
+        end_date = datetime.datetime.now()
+        start_date = end_date - datetime.timedelta(days=days)
+
+        return await self.get_operations_for_period(account_id, start_date, end_date)
+
+    def get_profit_analysis(self, operations_response):
+        """Get profit analysis using the new ProfitCalculator"""
+        if not operations_response or not operations_response.operations:
+            return [], 0.0, []
+
+        from app.utils.profit_calculator import ProfitCalculator
+        calculator = ProfitCalculator()
+
+        return calculator.process_operations(operations_response.operations)
 
 
 client = TinkoffClient(token=settings.token, sandbox=settings.sandbox)

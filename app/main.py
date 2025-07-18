@@ -29,6 +29,7 @@ from app.client import client
 from app.settings import settings
 from app.utils.portfolio import get_position
 from app.utils.quotation import quotation_to_float
+from app.utils.profit_calculator import ProfitCalculator
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -63,7 +64,9 @@ async def check_stop_loss():
 async def remove_log_file():
     os.remove("log.txt")
 
-schedule.start()
+# Only start the scheduler if not in testing mode
+if __name__ != "__main__" and not os.getenv('TESTING'):
+    schedule.start()
 
 
 logging.basicConfig(
@@ -579,52 +582,33 @@ async def main(request: Request):
     )
 
 
-def calc_trades(trades):
-    trades.reverse()
+def calc_trades(operations):
+    """
+    Calculate trades using the new ProfitCalculator
+    Returns trades in the old format for compatibility
+    """
+    calculator = ProfitCalculator()
+    trades, total_profit, processed_operations = calculator.process_operations(
+        operations)
+
+    # Convert to old format for compatibility
     res = []
-    p = []
-    prev = None
-    inc = 0
-    num = 1
-    future_sum = 0
-
-    def add_mark(prev, i, type):
-        nonlocal num, p, future_sum
+    for i, trade in enumerate(trades):
         res.append({
-            "num": num,
-            "timeStart": correct_timezone(i.date).strftime("%Y-%m-%d %H:%M"),
-            "timeEnd": correct_timezone(prev.date).strftime("%Y-%m-%d %H:%M"),
-            "type": type,
-            "figi": i.figi,
-            "quantity": i.quantity,
-            "pt1": abs(quotation_to_float(prev.payment)) / quotation_to_float(prev.price) / prev.quantity,
-            "pt2": abs(quotation_to_float(i.payment)) / quotation_to_float(i.price) / i.quantity,
-            "result": quotation_to_float(prev.payment) + quotation_to_float(i.payment) + future_sum
+            "num": i + 1,
+            "timeStart": trade.entry_time.strftime("%Y-%m-%d %H:%M"),
+            "timeEnd": trade.exit_time.strftime("%Y-%m-%d %H:%M"),
+            "type": trade.direction.title(),
+            "figi": trade.figi,
+            "quantity": trade.quantity,
+            "pt1": trade.entry_price,
+            "pt2": trade.exit_price,
+            "result": trade.net_profit,
+            "gross_profit": trade.gross_profit,
+            "fees": trade.fees
         })
-        future_sum = 0
-        num += 1
 
-    for i in trades:
-        if i.operation_type == OperationType.OPERATION_TYPE_BUY:
-            if prev != None and prev.figi == i.figi and prev.operation_type == OperationType.OPERATION_TYPE_SELL:
-                add_mark(prev, i, "Short")
-            prev = i
-            p.append(prev)
-        elif i.operation_type == OperationType.OPERATION_TYPE_SELL:
-            if prev != None and prev.figi == i.figi and prev.operation_type == OperationType.OPERATION_TYPE_BUY:
-                add_mark(prev, i, "Long")
-            prev = i
-            p.append(prev)
-        elif i.operation_type == OperationType.OPERATION_TYPE_BROKER_FEE or i.operation_type == OperationType.OPERATION_TYPE_WRITING_OFF_VARMARGIN or i.operation_type == OperationType.OPERATION_TYPE_ACCRUING_VARMARGIN:
-            if len(res) > 0 and i.operation_type == OperationType.OPERATION_TYPE_BROKER_FEE:
-                res[-1]["result"] += quotation_to_float(i.payment)
-            else:
-                future_sum += quotation_to_float(i.payment)
-            p.append(i)
-
-    inc = sum([i["result"] for i in res])
-
-    return res, inc, p
+    return res, total_profit, processed_operations
 
 
 @app.post("/change_work_on_time")
@@ -811,3 +795,123 @@ async def change2(k: Annotated[str, Form()]):
     figi_name = KOT2[figi]
     save_settings()
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
+
+
+@app.get("/api/profit-analysis")
+async def get_profit_analysis(days: int = 30):
+    """Get detailed profit analysis for the specified number of days"""
+    if client.client is None:
+        await client.ainit()
+
+    try:
+        operations_response = await client.get_historical_data(
+            account_id=settings.account_id,
+            days=days
+        )
+
+        if not operations_response:
+            return {"error": "Failed to get operations data"}
+
+        calculator = ProfitCalculator()
+        trades, total_profit, _ = calculator.process_operations(
+            operations_response.operations)
+
+        # Get monthly analysis
+        monthly_analysis = calculator.get_monthly_profit_analysis(
+            operations_response.operations)
+
+        # Get weekly analysis
+        weekly_analysis = calculator.get_weekly_profit_analysis(
+            operations_response.operations)
+
+        return {
+            "total_profit": total_profit,
+            "trades_count": len(trades),
+            "winning_trades": len([t for t in trades if t.net_profit > 0]),
+            "losing_trades": len([t for t in trades if t.net_profit < 0]),
+            "average_profit_per_trade": total_profit / len(trades) if trades else 0,
+            "monthly_analysis": [
+                {
+                    "period": f"{p.start_date.strftime('%Y-%m')}",
+                    "profit": p.net_profit,
+                    "percentage": p.profit_percentage,
+                    "trades": p.trades_count,
+                    "starting_balance": p.starting_balance,
+                    "ending_balance": p.ending_balance
+                } for p in monthly_analysis
+            ],
+            "weekly_analysis": [
+                {
+                    "period": f"{p.start_date.strftime('%Y-%m-%d')} to {p.end_date.strftime('%Y-%m-%d')}",
+                    "profit": p.net_profit,
+                    "percentage": p.profit_percentage,
+                    "trades": p.trades_count,
+                    "starting_balance": p.starting_balance,
+                    "ending_balance": p.ending_balance
+                } for p in weekly_analysis
+            ],
+            "recent_trades": [
+                {
+                    "entry_time": t.entry_time.isoformat(),
+                    "exit_time": t.exit_time.isoformat(),
+                    "direction": t.direction,
+                    "quantity": t.quantity,
+                    "entry_price": t.entry_price,
+                    "exit_price": t.exit_price,
+                    "gross_profit": t.gross_profit,
+                    "fees": t.fees,
+                    "net_profit": t.net_profit
+                } for t in trades[-10:]  # Last 10 trades
+            ]
+        }
+
+    except Exception as e:
+        logger.error(f"Error in profit analysis: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/api/period-profit")
+async def get_period_profit(start_date: str, end_date: str, starting_balance: float = 0.0):
+    """Get profit analysis for a specific period"""
+    if client.client is None:
+        await client.ainit()
+
+    try:
+        import datetime
+        start_dt = datetime.datetime.fromisoformat(start_date)
+        end_dt = datetime.datetime.fromisoformat(end_date)
+
+        operations_response = await client.get_operations_for_period(
+            account_id=settings.account_id,
+            start_date=start_dt,
+            end_date=end_dt
+        )
+
+        if not operations_response:
+            return {"error": "Failed to get operations data"}
+
+        calculator = ProfitCalculator()
+        period_profit = calculator.calculate_period_profit(
+            operations_response.operations,
+            start_dt,
+            end_dt,
+            starting_balance
+        )
+
+        return {
+            "start_date": period_profit.start_date.isoformat(),
+            "end_date": period_profit.end_date.isoformat(),
+            "starting_balance": period_profit.starting_balance,
+            "ending_balance": period_profit.ending_balance,
+            "total_profit": period_profit.total_profit,
+            "total_fees": period_profit.total_fees,
+            "net_profit": period_profit.net_profit,
+            "profit_percentage": period_profit.profit_percentage,
+            "trades_count": period_profit.trades_count,
+            "winning_trades": period_profit.winning_trades,
+            "losing_trades": period_profit.losing_trades
+        }
+
+    except Exception as e:
+        logger.error(f"Error in period profit analysis: {e}")
+        return {"error": str(e)}
