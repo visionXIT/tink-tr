@@ -239,6 +239,108 @@ class ProfitCalculator:
 
         return analysis
 
+    def calculate_starting_positions_from_current(self, operations: List[Any], current_positions: Dict[str, int]) -> Dict[str, int]:
+        """
+        Calculate starting positions by working backwards from current positions
+
+        Args:
+            operations: List of operations from start_date to end_date
+            current_positions: Current positions {FIGI: quantity}
+
+        Returns:
+            Dict mapping FIGI to starting position
+        """
+        if not operations:
+            return current_positions.copy()
+
+        # Sort operations by date (newest first for reverse calculation)
+        operations = sorted(operations, key=lambda x: x.date, reverse=True)
+
+        # Start with current positions
+        starting_positions = current_positions.copy()
+
+        # Process operations in reverse chronological order
+        for operation in operations:
+            if operation.operation_type in [OperationType.OPERATION_TYPE_BUY, OperationType.OPERATION_TYPE_SELL]:
+                figi = operation.figi
+                quantity = operation.quantity
+
+                # Initialize position if not exists
+                if figi not in starting_positions:
+                    starting_positions[figi] = 0
+
+                # Reverse the operation:
+                # If it was a BUY, we had fewer shares before → subtract
+                # If it was a SELL, we had more shares before → add
+                if operation.operation_type == OperationType.OPERATION_TYPE_BUY:
+                    starting_positions[figi] -= quantity
+                else:  # SELL
+                    starting_positions[figi] += quantity
+
+        return starting_positions
+
+    def auto_detect_starting_positions(self, operations: List[Any]) -> Dict[str, int]:
+        """
+        Автоматически определяет наиболее вероятные начальные позиции
+        на основе анализа первых операций для каждого FIGI
+
+        Args:
+            operations: Список операций
+
+        Returns:
+            Dict с предполагаемыми начальными позициями
+        """
+        if not operations:
+            return {}
+
+        # Группируем операции по FIGI
+        figi_operations = defaultdict(list)
+        for op in operations:
+            if op.operation_type in [OperationType.OPERATION_TYPE_BUY, OperationType.OPERATION_TYPE_SELL]:
+                figi_operations[op.figi].append(op)
+
+        detected_positions = {}
+
+        for figi, ops in figi_operations.items():
+            if not ops:
+                continue
+
+            # Сортируем операции по времени
+            ops = sorted(ops, key=lambda x: x.date)
+            first_op = ops[0]
+
+            # Определяем наиболее вероятную начальную позицию
+            if first_op.operation_type == OperationType.OPERATION_TYPE_BUY:
+                # Первая операция - покупка
+                # Наиболее вероятно, что это закрытие короткой позиции
+                detected_positions[figi] = -first_op.quantity
+            else:
+                # Первая операция - продажа
+                # Наиболее вероятно, что это закрытие длинной позиции
+                detected_positions[figi] = first_op.quantity
+
+        return detected_positions
+
+    def process_operations_with_auto_positions(self, operations: List[Any]) -> Tuple[List[Trade], float, List[Any], Dict[str, int]]:
+        """
+        Обрабатывает операции с автоматическим определением начальных позиций
+
+        Args:
+            operations: Список операций
+
+        Returns:
+            Tuple (trades, total_profit, operations, detected_starting_positions)
+        """
+        # Автоматически определяем начальные позиции
+        starting_positions = self.auto_detect_starting_positions(operations)
+
+        # Обрабатываем операции с новой непрерывной логикой
+        trades, total_profit, processed_operations = self.process_operations_continuous(
+            operations, starting_positions
+        )
+
+        return trades, total_profit, processed_operations, starting_positions
+
     def _assign_fees_to_trades(self):
         """Assign fees and variation margin to trades after all operations are processed"""
         if not self.completed_trades:
@@ -1052,3 +1154,605 @@ class ProfitCalculator:
         )
 
         return trade
+
+    def get_enhanced_profit_analysis(self, operations: List[Any], current_positions: Dict[str, int] = None) -> Tuple[List[Trade], float, List[Any], Dict[str, int], Dict[str, Any]]:
+        """
+        Enhanced profit analysis with comprehensive position tracking
+
+        This method provides the most accurate profit calculation by:
+        1. Using current positions to calculate starting positions
+        2. Providing detailed analysis of potential issues
+        3. Offering recommendations for data quality
+
+        Args:
+            operations: List of operations to analyze
+            current_positions: Current positions {FIGI: quantity}
+
+        Returns:
+            Tuple of (trades, total_profit, operations, starting_positions, analysis_report)
+        """
+        if not operations:
+            return [], 0.0, [], {}, {}
+
+        # Sort operations by date
+        sorted_operations = sorted(operations, key=lambda x: x.date)
+
+        # Calculate starting positions if current positions are provided
+        if current_positions:
+            starting_positions = self.calculate_starting_positions_from_current(
+                sorted_operations, current_positions)
+        else:
+            starting_positions = self.auto_detect_starting_positions(
+                sorted_operations)
+
+        # Process with calculated starting positions
+        trades, total_profit, processed_operations = self.process_operations_with_starting_positions(
+            sorted_operations, starting_positions)
+
+        # Generate analysis report
+        analysis_report = self._generate_analysis_report(
+            sorted_operations, starting_positions, trades, current_positions)
+
+        return trades, total_profit, processed_operations, starting_positions, analysis_report
+
+    def _generate_analysis_report(self, operations: List[Any], starting_positions: Dict[str, int],
+                                  trades: List[Trade], current_positions: Dict[str, int] = None) -> Dict[str, Any]:
+        """Generate comprehensive analysis report"""
+        from collections import defaultdict
+
+        report = {
+            'summary': {},
+            'position_analysis': {},
+            'data_quality': {},
+            'recommendations': []
+        }
+
+        # Summary
+        report['summary'] = {
+            'total_operations': len(operations),
+            'total_trades': len(trades),
+            'total_profit': sum(trade.net_profit for trade in trades),
+            'instruments_traded': len(set(op.figi for op in operations if hasattr(op, 'figi'))),
+            'starting_positions_count': len(starting_positions),
+            'period_start': operations[0].date if operations else None,
+            'period_end': operations[-1].date if operations else None
+        }
+
+        # Position analysis
+        position_analysis = defaultdict(dict)
+        for figi, starting_pos in starting_positions.items():
+            position_analysis[figi]['starting_position'] = starting_pos
+            position_analysis[figi]['current_position'] = current_positions.get(
+                figi, 0) if current_positions else 'unknown'
+
+            # Find first and last operations for this FIGI
+            figi_ops = [op for op in operations if hasattr(
+                op, 'figi') and op.figi == figi]
+            if figi_ops:
+                first_op = figi_ops[0]
+                last_op = figi_ops[-1]
+                position_analysis[figi]['first_operation'] = {
+                    'type': 'BUY' if first_op.operation_type == OperationType.OPERATION_TYPE_BUY else 'SELL',
+                    'quantity': first_op.quantity,
+                    'date': first_op.date
+                }
+                position_analysis[figi]['last_operation'] = {
+                    'type': 'BUY' if last_op.operation_type == OperationType.OPERATION_TYPE_BUY else 'SELL',
+                    'quantity': last_op.quantity,
+                    'date': last_op.date
+                }
+                position_analysis[figi]['total_operations'] = len(figi_ops)
+
+        report['position_analysis'] = dict(position_analysis)
+
+        # Data quality assessment
+        quality_issues = []
+        large_losses = [trade for trade in trades if trade.net_profit < -50000]
+        if large_losses:
+            quality_issues.append(
+                f"Found {len(large_losses)} trades with unusually large losses (< -50,000)")
+
+        # Check for potential starting position issues
+        for figi, analysis in position_analysis.items():
+            if analysis.get('first_operation', {}).get('type') == 'SELL' and starting_positions.get(figi, 0) <= 0:
+                quality_issues.append(
+                    f"FIGI {figi}: First operation is SELL but starting position is {starting_positions.get(figi, 0)}")
+
+        report['data_quality'] = {
+            'issues_found': len(quality_issues),
+            'issues': quality_issues,
+            'data_completeness': 'partial' if not current_positions else 'complete'
+        }
+
+        # Recommendations
+        recommendations = []
+        if quality_issues:
+            recommendations.append(
+                "Consider using current positions to calculate more accurate starting positions")
+        if not current_positions:
+            recommendations.append(
+                "Provide current positions for the most accurate analysis")
+        if large_losses:
+            recommendations.append(
+                "Review trades with large losses - they may indicate missing position data")
+
+        report['recommendations'] = recommendations
+
+        return report
+
+    def validate_position_consistency(self, operations: List[Any], starting_positions: Dict[str, int],
+                                      current_positions: Dict[str, int] = None) -> Dict[str, Any]:
+        """
+        Validate position consistency by simulating all operations
+
+        Args:
+            operations: List of operations
+            starting_positions: Starting positions
+            current_positions: Current positions (optional)
+
+        Returns:
+            Dict with validation results
+        """
+        if not operations:
+            return {'valid': True, 'issues': []}
+
+        # Simulate position changes
+        simulated_positions = starting_positions.copy()
+        issues = []
+
+        for op in sorted(operations, key=lambda x: x.date):
+            if op.operation_type in [OperationType.OPERATION_TYPE_BUY, OperationType.OPERATION_TYPE_SELL]:
+                figi = op.figi
+                quantity = op.quantity
+
+                if figi not in simulated_positions:
+                    simulated_positions[figi] = 0
+
+                if op.operation_type == OperationType.OPERATION_TYPE_BUY:
+                    simulated_positions[figi] += quantity
+                else:  # SELL
+                    simulated_positions[figi] -= quantity
+
+        # Check consistency with current positions if provided
+        if current_positions:
+            for figi, expected_pos in current_positions.items():
+                simulated_pos = simulated_positions.get(figi, 0)
+                if simulated_pos != expected_pos:
+                    issues.append(
+                        f"FIGI {figi}: Expected {expected_pos}, got {simulated_pos}")
+
+        return {
+            'valid': len(issues) == 0,
+            'issues': issues,
+            'final_simulated_positions': simulated_positions,
+            'expected_positions': current_positions or {}
+        }
+
+    def get_position_history(self, operations: List[Any], starting_positions: Dict[str, int] = None) -> Dict[str, List[Dict]]:
+        """
+        Get position history for each FIGI throughout the operations
+
+        Args:
+            operations: List of operations
+            starting_positions: Starting positions
+
+        Returns:
+            Dict mapping FIGI to list of position snapshots
+        """
+        if starting_positions is None:
+            starting_positions = {}
+
+        position_history = defaultdict(list)
+        current_positions = starting_positions.copy()
+
+        # Add initial positions
+        for figi, pos in starting_positions.items():
+            position_history[figi].append({
+                'date': operations[0].date if operations else None,
+                'position': pos,
+                'operation_type': 'INITIAL',
+                'operation_id': None
+            })
+
+        # Process each operation
+        for op in sorted(operations, key=lambda x: x.date):
+            if op.operation_type in [OperationType.OPERATION_TYPE_BUY, OperationType.OPERATION_TYPE_SELL]:
+                figi = op.figi
+                quantity = op.quantity
+
+                if figi not in current_positions:
+                    current_positions[figi] = 0
+
+                old_position = current_positions[figi]
+
+                if op.operation_type == OperationType.OPERATION_TYPE_BUY:
+                    current_positions[figi] += quantity
+                else:  # SELL
+                    current_positions[figi] -= quantity
+
+                position_history[figi].append({
+                    'date': op.date,
+                    'position': current_positions[figi],
+                    'position_change': current_positions[figi] - old_position,
+                    'operation_type': 'BUY' if op.operation_type == OperationType.OPERATION_TYPE_BUY else 'SELL',
+                    'operation_id': op.id,
+                    'quantity': quantity,
+                    'crosses_zero': (old_position > 0 and current_positions[figi] <= 0) or (old_position < 0 and current_positions[figi] >= 0)
+                })
+
+        return dict(position_history)
+
+    def detect_problematic_trades(self, trades: List[Trade], threshold: float = -10000) -> List[Dict[str, Any]]:
+        """
+        Detect trades that might have calculation issues
+
+        Args:
+            trades: List of trades
+            threshold: Profit threshold below which trades are considered problematic
+
+        Returns:
+            List of problematic trades with analysis
+        """
+        problematic = []
+
+        for trade in trades:
+            if trade.net_profit < threshold:
+                issue_analysis = {
+                    'trade': trade,
+                    'issues': [],
+                    'severity': 'high' if trade.net_profit < -50000 else 'medium'
+                }
+
+                # Check for common issues
+                if trade.direction == 'SHORT' and trade.entry_price < trade.exit_price:
+                    issue_analysis['issues'].append(
+                        "Short position with entry price < exit price")
+
+                if trade.direction == 'LONG' and trade.entry_price > trade.exit_price:
+                    issue_analysis['issues'].append(
+                        "Long position with entry price > exit price")
+
+                if abs(trade.gross_profit) > 100000:
+                    issue_analysis['issues'].append(
+                        "Unusually large gross profit magnitude")
+
+                if not issue_analysis['issues']:
+                    issue_analysis['issues'].append(
+                        "Large loss with no obvious cause - check starting positions")
+
+                problematic.append(issue_analysis)
+
+        return problematic
+
+    def process_operations_continuous(self, operations: List[Any], starting_positions: Dict[str, int] = None) -> Tuple[List[Trade], float, List[Any]]:
+        """
+        Обрабатывает операции с непрерывной логикой - каждая операция участвует в сделке
+
+        Args:
+            operations: Список операций
+            starting_positions: Начальные позиции {FIGI: количество}
+
+        Returns:
+            Tuple (trades, total_profit, processed_operations)
+        """
+        if not operations:
+            return [], 0.0, []
+
+        if starting_positions is None:
+            starting_positions = {}
+
+        self.reset()
+
+        # Сортируем операции по времени
+        sorted_operations = sorted(operations, key=lambda x: x.date)
+
+        # Отделяем торговые операции от комиссий и вармаржи
+        trading_operations = []
+        for operation in sorted_operations:
+            if operation.operation_type == OperationType.OPERATION_TYPE_BROKER_FEE:
+                self._process_fee_operation(operation)
+            elif operation.operation_type in [
+                OperationType.OPERATION_TYPE_WRITING_OFF_VARMARGIN,
+                OperationType.OPERATION_TYPE_ACCRUING_VARMARGIN
+            ]:
+                self._process_margin_operation(operation)
+            elif operation.operation_type in [
+                OperationType.OPERATION_TYPE_BUY,
+                OperationType.OPERATION_TYPE_SELL
+            ]:
+                trading_operations.append(operation)
+
+        # Обрабатываем торговые операции непрерывно
+        trades = self._process_continuous_trading(
+            trading_operations, starting_positions)
+
+        # Назначаем комиссии и вармаржу
+        self._assign_fees_and_margin_to_trades(trades)
+
+        # Рассчитываем общую прибыль
+        total_profit = sum(trade.net_profit for trade in trades)
+
+        return trades, total_profit, sorted_operations
+
+    def _process_continuous_trading(self, operations: List[Any], starting_positions: Dict[str, int]) -> List[Trade]:
+        """
+        Обрабатывает торговые операции непрерывно, создавая сделки при пересечении нулевой позиции
+
+        Args:
+            operations: Отсортированные торговые операции
+            starting_positions: Начальные позиции
+
+        Returns:
+            Список завершенных сделок
+        """
+        if not operations:
+            return []
+
+        # Группируем операции по FIGI
+        figi_operations = defaultdict(list)
+        for op in operations:
+            figi_operations[op.figi].append(op)
+
+        all_trades = []
+
+        # Обрабатываем каждый FIGI отдельно
+        for figi, figi_ops in figi_operations.items():
+            starting_pos = starting_positions.get(figi, 0)
+            figi_trades = self._process_figi_continuous(
+                figi, figi_ops, starting_pos)
+            all_trades.extend(figi_trades)
+
+        # Сортируем сделки по времени завершения
+        all_trades.sort(key=lambda x: x.exit_time)
+
+        return all_trades
+
+    def _process_figi_continuous(self, figi: str, operations: List[Any], starting_position: int) -> List[Trade]:
+        """
+        Обрабатывает операции для одного FIGI непрерывно
+
+        Args:
+            figi: FIGI инструмента
+            operations: Операции для этого FIGI
+            starting_position: Начальная позиция
+
+        Returns:
+            Список сделок для этого FIGI
+        """
+        if not operations:
+            return []
+
+        trades = []
+        current_position = starting_position
+        current_trade_operations = []  # Операции текущей сделки
+
+        # Если начальная позиция не ноль, создаем первую "виртуальную" операцию
+        if starting_position != 0:
+            # Создаем виртуальную операцию открытия позиции
+            first_op = operations[0]
+            virtual_op = {
+                'id': f'virtual_start_{figi}',
+                'type': OperationType.OPERATION_TYPE_BUY if starting_position > 0 else OperationType.OPERATION_TYPE_SELL,
+                # Чуть раньше первой операции
+                'date': first_op.date - datetime.timedelta(microseconds=1),
+                'quantity': abs(starting_position),
+                'price': 0.0,  # Цена неизвестна
+                'payment': 0.0,  # Платеж неизвестен
+                'virtual': True
+            }
+            current_trade_operations.append(virtual_op)
+
+        for operation in operations:
+            # Добавляем операцию в текущую сделку
+            op_dict = {
+                'id': operation.id,
+                'type': operation.operation_type,
+                'date': operation.date,
+                'quantity': operation.quantity,
+                'price': quotation_to_float(operation.price),
+                'payment': quotation_to_float(operation.payment),
+                'virtual': False
+            }
+            current_trade_operations.append(op_dict)
+
+            # Обновляем позицию
+            if operation.operation_type == OperationType.OPERATION_TYPE_BUY:
+                new_position = current_position + operation.quantity
+            else:  # SELL
+                new_position = current_position - operation.quantity
+
+            # Проверяем, пересекает ли позиция ноль
+            if self._crosses_zero(current_position, new_position):
+                # Создаем сделку
+                trade = self._create_trade_from_operations(
+                    figi, current_trade_operations, current_position, new_position)
+                if trade:
+                    trades.append(trade)
+
+                # Начинаем новую сделку
+                current_trade_operations = []
+
+                # Если позиция не стала нулевой, добавляем операцию в новую сделку
+                if new_position != 0:
+                    current_trade_operations.append(op_dict)
+
+            current_position = new_position
+
+        # Если остались незавершенные операции, создаем открытую позицию (не включаем в сделки)
+        # В соответствии с требованием, что сделки должны быть завершенными
+
+        return trades
+
+    def _crosses_zero(self, old_position: int, new_position: int) -> bool:
+        """
+        Проверяет, пересекает ли позиция ноль
+
+        Args:
+            old_position: Старая позиция
+            new_position: Новая позиция
+
+        Returns:
+            True, если позиция пересекает ноль
+        """
+        # Позиция пересекает ноль если:
+        # - была положительной и стала отрицательной
+        # - была отрицательной и стала положительной
+        # - была ненулевой и стала нулевой
+        return (old_position > 0 and new_position <= 0) or (old_position < 0 and new_position >= 0)
+
+    def _create_trade_from_operations(self, figi: str, operations: List[Dict], start_position: int, end_position: int) -> Optional[Trade]:
+        """
+        Создает сделку из списка операций
+
+        Args:
+            figi: FIGI инструмента
+            operations: Список операций сделки
+            start_position: Начальная позиция
+            end_position: Конечная позиция
+
+        Returns:
+            Объект Trade или None
+        """
+        if not operations:
+            return None
+
+        # Определяем направление сделки
+        if start_position > 0:
+            direction = 'LONG'  # Закрываем длинную позицию
+        elif start_position < 0:
+            direction = 'SHORT'  # Закрываем короткую позицию
+        else:
+            # Начинаем с нуля - определяем по первой операции
+            first_op = operations[0]
+            if first_op['type'] == OperationType.OPERATION_TYPE_BUY:
+                direction = 'LONG'
+            else:
+                direction = 'SHORT'
+
+        # Находим первую и последнюю реальные операции
+        real_operations = [
+            op for op in operations if not op.get('virtual', False)]
+        if not real_operations:
+            return None
+
+        first_op = real_operations[0]
+        last_op = real_operations[-1]
+
+        # Рассчитываем количество сделки
+        quantity = abs(start_position) if start_position != 0 else abs(
+            end_position)
+        if quantity == 0:
+            # Рассчитываем как сумму всех операций
+            total_buy_qty = sum(
+                op['quantity'] for op in real_operations if op['type'] == OperationType.OPERATION_TYPE_BUY)
+            total_sell_qty = sum(
+                op['quantity'] for op in real_operations if op['type'] == OperationType.OPERATION_TYPE_SELL)
+            quantity = min(total_buy_qty, total_sell_qty)
+
+        if quantity == 0:
+            return None
+
+        # Рассчитываем средние цены
+        buy_operations = [
+            op for op in real_operations if op['type'] == OperationType.OPERATION_TYPE_BUY]
+        sell_operations = [
+            op for op in real_operations if op['type'] == OperationType.OPERATION_TYPE_SELL]
+
+        if buy_operations and sell_operations:
+            # Рассчитываем средневзвешенные цены
+            total_buy_amount = sum(abs(op['payment']) for op in buy_operations)
+            total_buy_quantity = sum(op['quantity'] for op in buy_operations)
+            avg_buy_price = total_buy_amount / \
+                total_buy_quantity if total_buy_quantity > 0 else 0
+
+            total_sell_amount = sum(abs(op['payment'])
+                                    for op in sell_operations)
+            total_sell_quantity = sum(op['quantity'] for op in sell_operations)
+            avg_sell_price = total_sell_amount / \
+                total_sell_quantity if total_sell_quantity > 0 else 0
+
+            # Рассчитываем прибыль
+            if direction == 'LONG':
+                entry_price = avg_buy_price
+                exit_price = avg_sell_price
+                gross_profit = (exit_price - entry_price) * quantity
+            else:  # SHORT
+                entry_price = avg_sell_price
+                exit_price = avg_buy_price
+                gross_profit = (entry_price - exit_price) * quantity
+
+        elif buy_operations:
+            # Только покупки - используем первую и последнюю
+            entry_price = buy_operations[0]['price']
+            exit_price = buy_operations[-1]['price']
+            gross_profit = (exit_price - entry_price) * quantity
+            direction = 'LONG'
+
+        elif sell_operations:
+            # Только продажи - используем первую и последнюю
+            entry_price = sell_operations[0]['price']
+            exit_price = sell_operations[-1]['price']
+            gross_profit = (entry_price - exit_price) * quantity
+            direction = 'SHORT'
+
+        else:
+            return None
+
+        # Создаем сделку
+        trade = Trade(
+            trade_id=f"{figi}_{first_op['id']}_{last_op['id']}",
+            figi=figi,
+            instrument_name=figi,
+            entry_time=self.correct_timezone(first_op['date']),
+            exit_time=self.correct_timezone(last_op['date']),
+            entry_price=entry_price,
+            exit_price=exit_price,
+            quantity=quantity,
+            direction=direction,
+            gross_profit=gross_profit,
+            fees=0.0,  # Будет назначена позже
+            net_profit=gross_profit,  # Будет пересчитана после назначения комиссий
+            entry_operation_id=first_op['id'],
+            exit_operation_id=last_op['id'],
+            variation_margin=0.0  # Будет назначена позже
+        )
+
+        return trade
+
+    def _assign_fees_and_margin_to_trades(self, trades: List[Trade]):
+        """
+        Назначает комиссии и вариационную маржу сделкам
+
+        Args:
+            trades: Список сделок
+        """
+        if not trades:
+            return
+
+        # Назначаем комиссии пропорционально времени сделок
+        total_fees = sum(fee['amount'] for fee in self.fees_buffer)
+        total_margin = sum(margin['amount']
+                           for margin in self.margin_operations)
+
+        if total_fees > 0:
+            # Распределяем комиссии пропорционально прибыли сделок
+            total_gross_profit = sum(abs(trade.gross_profit)
+                                     for trade in trades)
+            if total_gross_profit > 0:
+                for trade in trades:
+                    trade.fees = total_fees * \
+                        abs(trade.gross_profit) / total_gross_profit
+            else:
+                # Если нет прибыли, распределяем равномерно
+                fees_per_trade = total_fees / len(trades)
+                for trade in trades:
+                    trade.fees = fees_per_trade
+
+        if total_margin != 0:
+            # Распределяем вариационную маржу пропорционально времени
+            for trade in trades:
+                trade.variation_margin = total_margin / len(trades)
+
+        # Пересчитываем чистую прибыль
+        for trade in trades:
+            trade.net_profit = trade.gross_profit - trade.fees + trade.variation_margin

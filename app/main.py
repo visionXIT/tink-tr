@@ -39,6 +39,11 @@ from app.settings import settings
 schedule = AsyncIOScheduler()
 
 
+def correct_timezone(date: datetime.datetime) -> datetime.datetime:
+    """Apply timezone correction (+3 hours for Moscow time)"""
+    return date + datetime.timedelta(hours=3)
+
+
 @schedule.scheduled_job('interval', seconds=10)
 async def check_stop_loss():
     global last_order_price, last_order
@@ -65,7 +70,7 @@ async def remove_log_file():
     os.remove("log.txt")
 
 # Only start the scheduler if not in testing mode
-if __name__ != "__main__" and not os.getenv('TESTING'):
+if __name__ == "__main__" and not os.getenv('TESTING'):
     schedule.start()
 
 
@@ -584,11 +589,12 @@ async def main(request: Request):
 
 def calc_trades(operations):
     """
-    Calculate trades using the new ProfitCalculator
+    Calculate trades using the enhanced ProfitCalculator with auto-detected starting positions
     Returns trades in the old format for compatibility
     """
     calculator = ProfitCalculator()
-    trades, total_profit, processed_operations = calculator.process_operations(
+    # Use the enhanced method that automatically detects starting positions
+    trades, total_profit, processed_operations, starting_positions = calculator.process_operations_with_auto_positions(
         operations)
 
     # Convert to old format for compatibility
@@ -798,72 +804,94 @@ async def change2(k: Annotated[str, Form()]):
 
 
 @app.get("/api/profit-analysis")
-async def get_profit_analysis(days: int = 30):
+async def get_profit_analysis(days: int = 30, enhanced: bool = True):
     """Get detailed profit analysis for the specified number of days"""
     if client.client is None:
         await client.ainit()
 
     try:
-        operations_response = await client.get_historical_data(
-            account_id=settings.account_id,
-            days=days
-        )
+        import datetime
+        moscow_tz = __import__('pytz').timezone('Europe/Moscow')
+        end_date = datetime.datetime.now(moscow_tz)
+        start_date = end_date - datetime.timedelta(days=days)
 
-        if not operations_response:
-            return {"error": "Failed to get operations data"}
+        if enhanced:
+            # Use enhanced method with current positions
+            result = await client.get_enhanced_profit_analysis(
+                settings.account_id, start_date, end_date, use_current_positions=True
+            )
 
-        calculator = ProfitCalculator()
-        trades, total_profit, _ = calculator.process_operations(
-            operations_response.operations)
+            if 'error' in result:
+                return {"error": result['error']}
 
-        # Get monthly analysis
-        monthly_analysis = calculator.get_monthly_profit_analysis(
-            operations_response.operations)
+            trades = result['trades']
+            total_profit = result['total_profit']
 
-        # Get weekly analysis
-        weekly_analysis = calculator.get_weekly_profit_analysis(
-            operations_response.operations)
+            # Get analysis report
+            analysis_report = result['analysis_report']
 
-        return {
-            "total_profit": total_profit,
-            "trades_count": len(trades),
-            "winning_trades": len([t for t in trades if t.net_profit > 0]),
-            "losing_trades": len([t for t in trades if t.net_profit < 0]),
-            "average_profit_per_trade": total_profit / len(trades) if trades else 0,
-            "monthly_analysis": [
-                {
-                    "period": f"{p.start_date.strftime('%Y-%m')}",
-                    "profit": p.net_profit,
-                    "percentage": p.profit_percentage,
-                    "trades": p.trades_count,
-                    "starting_balance": p.starting_balance,
-                    "ending_balance": p.ending_balance
-                } for p in monthly_analysis
-            ],
-            "weekly_analysis": [
-                {
-                    "period": f"{p.start_date.strftime('%Y-%m-%d')} to {p.end_date.strftime('%Y-%m-%d')}",
-                    "profit": p.net_profit,
-                    "percentage": p.profit_percentage,
-                    "trades": p.trades_count,
-                    "starting_balance": p.starting_balance,
-                    "ending_balance": p.ending_balance
-                } for p in weekly_analysis
-            ],
-            "recent_trades": [
-                {
-                    "entry_time": t.entry_time.isoformat(),
-                    "exit_time": t.exit_time.isoformat(),
-                    "direction": t.direction,
-                    "quantity": t.quantity,
-                    "entry_price": t.entry_price,
-                    "exit_price": t.exit_price,
-                    "gross_profit": t.gross_profit,
-                    "fees": t.fees,
-                    "net_profit": t.net_profit
-                } for t in trades[-10:]  # Last 10 trades
-            ]
-        }
+            return {
+                "method": "enhanced",
+                "total_profit": total_profit,
+                "trades_count": len(trades),
+                "winning_trades": len([t for t in trades if t.net_profit > 0]),
+                "losing_trades": len([t for t in trades if t.net_profit < 0]),
+                "average_profit_per_trade": total_profit / len(trades) if trades else 0,
+                "starting_positions": result['starting_positions'],
+                "current_positions": result['current_positions'],
+                "data_quality": analysis_report['data_quality'],
+                "recommendations": analysis_report['recommendations'],
+                "problematic_trades_count": len(result['problematic_trades']),
+                "validation_result": result['validation_result'],
+                "recent_trades": [
+                    {
+                        "entry_time": t.entry_time.isoformat(),
+                        "exit_time": t.exit_time.isoformat(),
+                        "direction": t.direction,
+                        "quantity": t.quantity,
+                        "entry_price": t.entry_price,
+                        "exit_price": t.exit_price,
+                        "gross_profit": t.gross_profit,
+                        "fees": t.fees,
+                        "net_profit": t.net_profit
+                    } for t in trades[-10:]  # Last 10 trades
+                ]
+            }
+        else:
+            # Use traditional method for comparison
+            operations_response = await client.get_historical_data(
+                account_id=settings.account_id,
+                days=days
+            )
+
+            if not operations_response:
+                return {"error": "Failed to get operations data"}
+
+            calculator = ProfitCalculator()
+            trades, total_profit, _ = calculator.process_operations(
+                operations_response.operations)
+
+            return {
+                "method": "traditional",
+                "total_profit": total_profit,
+                "trades_count": len(trades),
+                "winning_trades": len([t for t in trades if t.net_profit > 0]),
+                "losing_trades": len([t for t in trades if t.net_profit < 0]),
+                "average_profit_per_trade": total_profit / len(trades) if trades else 0,
+                "recent_trades": [
+                    {
+                        "entry_time": t.entry_time.isoformat(),
+                        "exit_time": t.exit_time.isoformat(),
+                        "direction": t.direction,
+                        "quantity": t.quantity,
+                        "entry_price": t.entry_price,
+                        "exit_price": t.exit_price,
+                        "gross_profit": t.gross_profit,
+                        "fees": t.fees,
+                        "net_profit": t.net_profit
+                    } for t in trades[-10:]  # Last 10 trades
+                ]
+            }
 
     except Exception as e:
         logger.error(f"Error in profit analysis: {e}")
@@ -914,4 +942,199 @@ async def get_period_profit(start_date: str, end_date: str, starting_balance: fl
 
     except Exception as e:
         logger.error(f"Error in period profit analysis: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/api/enhanced-profit-analysis")
+async def get_enhanced_profit_analysis(days: int = 30):
+    """Get enhanced profit analysis with comprehensive position tracking"""
+    if client.client is None:
+        await client.ainit()
+
+    try:
+        import datetime
+        moscow_tz = __import__('pytz').timezone('Europe/Moscow')
+        end_date = datetime.datetime.now(moscow_tz)
+        start_date = end_date - datetime.timedelta(days=days)
+
+        result = await client.get_enhanced_profit_analysis(
+            settings.account_id, start_date, end_date, use_current_positions=True
+        )
+
+        if 'error' in result:
+            return {"error": result['error']}
+
+        trades = result['trades']
+        analysis_report = result['analysis_report']
+
+        return {
+            "summary": {
+                "total_profit": result['total_profit'],
+                "trades_count": len(trades),
+                "winning_trades": len([t for t in trades if t.net_profit > 0]),
+                "losing_trades": len([t for t in trades if t.net_profit < 0]),
+                "average_profit_per_trade": result['total_profit'] / len(trades) if trades else 0,
+                "method_used": result['method_used']
+            },
+            "positions": {
+                "starting_positions": result['starting_positions'],
+                "current_positions": result['current_positions'],
+                "starting_positions_count": len(result['starting_positions']),
+                "current_positions_count": len(result['current_positions'])
+            },
+            "data_quality": analysis_report['data_quality'],
+            "recommendations": analysis_report['recommendations'],
+            "problematic_trades": [
+                {
+                    "trade_id": issue['trade'].trade_id,
+                    "figi": issue['trade'].figi,
+                    "net_profit": issue['trade'].net_profit,
+                    "severity": issue['severity'],
+                    "issues": issue['issues']
+                } for issue in result['problematic_trades']
+            ],
+            "validation_result": result['validation_result'],
+            "position_history": {
+                figi: [
+                    {
+                        "date": change['date'].isoformat() if change['date'] else None,
+                        "position": change['position'],
+                        "operation_type": change['operation_type'],
+                        "quantity": change.get('quantity', 0),
+                        "crosses_zero": change.get('crosses_zero', False)
+                    } for change in history[:10]  # Limit to first 10 changes per FIGI
+                ] for figi, history in result['position_history'].items()
+            },
+            "trades": [
+                {
+                    "trade_id": t.trade_id,
+                    "figi": t.figi,
+                    "entry_time": t.entry_time.isoformat(),
+                    "exit_time": t.exit_time.isoformat(),
+                    "direction": t.direction,
+                    "quantity": t.quantity,
+                    "entry_price": t.entry_price,
+                    "exit_price": t.exit_price,
+                    "gross_profit": t.gross_profit,
+                    "fees": t.fees,
+                    "net_profit": t.net_profit,
+                    "variation_margin": t.variation_margin
+                } for t in trades
+            ]
+        }
+
+    except Exception as e:
+        logger.error(f"Error in enhanced profit analysis: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/api/profit-diagnostics")
+async def get_profit_diagnostics(days: int = 30):
+    """Diagnose profit calculation issues and provide recommendations"""
+    if client.client is None:
+        await client.ainit()
+
+    try:
+        import datetime
+        moscow_tz = __import__('pytz').timezone('Europe/Moscow')
+        end_date = datetime.datetime.now(moscow_tz)
+        start_date = end_date - datetime.timedelta(days=days)
+
+        diagnosis = await client.diagnose_profit_calculation_issues(
+            settings.account_id, start_date, end_date
+        )
+
+        if 'error' in diagnosis:
+            return {"error": diagnosis['error']}
+
+        return {
+            "diagnosis": {
+                "severity": diagnosis['severity'],
+                "comparison": diagnosis['comparison'],
+                "issues_detected": diagnosis['issues_detected'],
+                "recommendations": diagnosis['recommendations'],
+                "specific_recommendations": diagnosis['specific_recommendations']
+            },
+            "problematic_trades": [
+                {
+                    "trade_id": issue['trade'].trade_id,
+                    "figi": issue['trade'].figi,
+                    "net_profit": issue['trade'].net_profit,
+                    "severity": issue['severity'],
+                    "issues": issue['issues']
+                } for issue in diagnosis['problematic_trades']
+            ],
+            "validation_result": diagnosis['validation_result']
+        }
+
+    except Exception as e:
+        logger.error(f"Error in profit diagnostics: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/api/position-analysis")
+async def get_position_analysis(days: int = 30):
+    """Get detailed position analysis for the specified period"""
+    if client.client is None:
+        await client.ainit()
+
+    try:
+        import datetime
+        moscow_tz = __import__('pytz').timezone('Europe/Moscow')
+        end_date = datetime.datetime.now(moscow_tz)
+        start_date = end_date - datetime.timedelta(days=days)
+
+        # Get operations for the period
+        operations_response = await client.get_operations_for_period(
+            settings.account_id, start_date, end_date
+        )
+
+        if not operations_response:
+            return {"error": "Failed to get operations data"}
+
+        calculator = ProfitCalculator()
+
+        # Analyze starting positions
+        position_analysis = calculator.analyze_starting_positions(
+            operations_response.operations
+        )
+
+        # Calculate starting positions using current positions
+        starting_positions = await client.calculate_starting_positions(
+            settings.account_id, start_date, end_date
+        )
+
+        # Get current positions
+        current_positions_response = await client.get_positions(account_id=settings.account_id)
+        current_positions = {}
+        if current_positions_response:
+            if hasattr(current_positions_response, 'securities'):
+                for security in current_positions_response.securities:
+                    current_positions[security.figi] = int(security.balance)
+            if hasattr(current_positions_response, 'futures'):
+                for future in current_positions_response.futures:
+                    current_positions[future.figi] = int(future.balance)
+
+        return {
+            "period": {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "days": days
+            },
+            "positions": {
+                "starting_positions": starting_positions,
+                "current_positions": current_positions,
+                "instruments_count": len(set(list(starting_positions.keys()) + list(current_positions.keys())))
+            },
+            "position_analysis": {
+                figi: {
+                    "first_operation": analysis["first_operation"],
+                    "total_operations": analysis["total_operations"],
+                    "possible_scenarios": analysis["possible_scenarios"]
+                } for figi, analysis in position_analysis.items()
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error in position analysis: {e}")
         return {"error": str(e)}
