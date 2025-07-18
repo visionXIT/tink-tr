@@ -52,7 +52,7 @@ async def check_stop_loss():
     if stop_loss_diff == 0 or not stop_loss:
         logger.debug("STOP LOSS IS DISABLED")
         return
-    if last_order_price:
+    if last_order_price and last_order:
         current_price = await client.get_last_price(figi)
         logger.debug(
             f"CURRENT PRICE {current_price}, LAST ORDER PRICE {last_order_price}, STOP LOSS DIFF {stop_loss_diff}")
