@@ -98,6 +98,23 @@ class ProfitCalculator:
         Returns:
             Tuple of (completed_trades, total_profit, all_processed_operations)
         """
+        return self.process_operations_with_starting_positions(operations, {})
+
+    def process_operations_with_starting_positions(self, operations: List[Any], starting_positions: Dict[str, int] = None) -> Tuple[List[Trade], float, List[Any]]:
+        """
+        Process a list of operations and calculate trades and profit using session-based logic
+        with support for known starting positions
+
+        Args:
+            operations: List of trading operations from Tinkoff API
+            starting_positions: Dict mapping FIGI to starting position (positive = long, negative = short)
+
+        Returns:
+            Tuple of (completed_trades, total_profit, all_processed_operations)
+        """
+        if starting_positions is None:
+            starting_positions = {}
+
         self.reset()
 
         # Sort operations by date (oldest first)
@@ -119,8 +136,9 @@ class ProfitCalculator:
             ]:
                 trading_operations.append(operation)
 
-        # Group trading operations into sessions
-        self._group_operations_into_sessions(trading_operations)
+        # Group trading operations into sessions with starting positions
+        self._group_operations_into_sessions(
+            trading_operations, starting_positions)
 
         # Convert sessions to trades (for backward compatibility)
         self._convert_sessions_to_trades()
@@ -129,6 +147,97 @@ class ProfitCalculator:
         total_profit = sum(trade.net_profit for trade in self.completed_trades)
 
         return self.completed_trades, total_profit, sorted_operations
+
+    def analyze_starting_positions(self, operations: List[Any]) -> Dict[str, Dict[str, Any]]:
+        """
+        Analyze operations to provide insights about possible starting positions.
+
+        This method helps determine what the starting position might have been
+        for each FIGI by analyzing the first operation and potential position changes.
+
+        Args:
+            operations: List of trading operations from Tinkoff API
+
+        Returns:
+            Dict mapping FIGI to analysis results containing:
+            - first_operation: Details about the first operation
+            - possible_scenarios: List of possible starting positions and their implications
+        """
+        if not operations:
+            return {}
+
+        # Sort operations by date (oldest first)
+        sorted_operations = sorted(operations, key=lambda x: x.date)
+
+        # Group by FIGI
+        figi_operations = defaultdict(list)
+        for op in sorted_operations:
+            if op.operation_type in [OperationType.OPERATION_TYPE_BUY, OperationType.OPERATION_TYPE_SELL]:
+                figi_operations[op.figi].append(op)
+
+        analysis = {}
+
+        for figi, ops in figi_operations.items():
+            first_op = ops[0]
+
+            # Calculate what happens with different starting positions
+            scenarios = []
+
+            # Scenario 1: Starting from 0 (traditional assumption)
+            scenarios.append({
+                'starting_position': 0,
+                'description': 'Начинаем с нулевой позиции (традиционное предположение)',
+                'first_operation_result': first_op.quantity if first_op.operation_type == OperationType.OPERATION_TYPE_BUY else -first_op.quantity,
+                'crosses_zero': False
+            })
+
+            # Scenario 2: Starting position that would make first operation cross zero
+            if first_op.operation_type == OperationType.OPERATION_TYPE_BUY:
+                # If first operation is BUY, maybe we had a short position
+                scenarios.append({
+                    'starting_position': -first_op.quantity,
+                    'description': f'Начинаем с короткой позиции -{first_op.quantity} лотов (первая операция закрывает позицию)',
+                    'first_operation_result': 0,
+                    'crosses_zero': True
+                })
+
+                # Or maybe we had an even larger short position
+                scenarios.append({
+                    'starting_position': -(first_op.quantity * 2),
+                    'description': f'Начинаем с короткой позиции -{first_op.quantity * 2} лотов (первая операция частично закрывает)',
+                    'first_operation_result': -first_op.quantity,
+                    'crosses_zero': False
+                })
+            else:
+                # If first operation is SELL, maybe we had a long position
+                scenarios.append({
+                    'starting_position': first_op.quantity,
+                    'description': f'Начинаем с длинной позиции +{first_op.quantity} лотов (первая операция закрывает позицию)',
+                    'first_operation_result': 0,
+                    'crosses_zero': True
+                })
+
+                # Or maybe we had an even larger long position
+                scenarios.append({
+                    'starting_position': first_op.quantity * 2,
+                    'description': f'Начинаем с длинной позиции +{first_op.quantity * 2} лотов (первая операция частично закрывает)',
+                    'first_operation_result': first_op.quantity,
+                    'crosses_zero': False
+                })
+
+            analysis[figi] = {
+                'first_operation': {
+                    'type': 'Покупка' if first_op.operation_type == OperationType.OPERATION_TYPE_BUY else 'Продажа',
+                    'quantity': first_op.quantity,
+                    'price': quotation_to_float(first_op.price),
+                    'date': first_op.date,
+                    'amount': quotation_to_float(first_op.payment)
+                },
+                'possible_scenarios': scenarios,
+                'total_operations': len(ops)
+            }
+
+        return analysis
 
     def _assign_fees_to_trades(self):
         """Assign fees and variation margin to trades after all operations are processed"""
@@ -601,7 +710,7 @@ class ProfitCalculator:
 
         return periods
 
-    def _group_operations_into_sessions(self, trading_operations: List[Any]):
+    def _group_operations_into_sessions(self, trading_operations: List[Any], starting_positions: Dict[str, int] = None):
         """
         Group trading operations into trading sessions.
 
@@ -610,7 +719,14 @@ class ProfitCalculator:
         - Session can have multiple SELL operations (pyramiding)
         - Session ends with BUY operation(s) that close the position
         - Sessions are created per FIGI
+
+        Args:
+            trading_operations: List of trading operations
+            starting_positions: Dict mapping FIGI to starting position (default: empty positions)
         """
+        if starting_positions is None:
+            starting_positions = {}
+
         # Group operations by FIGI
         figi_operations = defaultdict(list)
         for op in trading_operations:
@@ -618,13 +734,14 @@ class ProfitCalculator:
 
         # Process each FIGI separately
         for figi, operations in figi_operations.items():
-            self._create_sessions_for_figi(figi, operations)
+            starting_pos = starting_positions.get(figi, 0)
+            self._create_sessions_for_figi(figi, operations, starting_pos)
 
-    def _create_sessions_for_figi(self, figi: str, operations: List[Any]):
+    def _create_sessions_for_figi(self, figi: str, operations: List[Any], starting_position: int = 0):
         """Create trading sessions for a specific FIGI using universal position tracking"""
         operations = sorted(operations, key=lambda x: x.date)
 
-        current_position = 0  # Track current position: positive = long, negative = short
+        current_position = starting_position  # Start with actual position instead of 0
         current_session = None
 
         for operation in operations:
