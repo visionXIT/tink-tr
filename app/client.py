@@ -36,6 +36,29 @@ class TinkoffClient:
             return await self.client.sandbox.get_sandbox_operations(**kwagrs)
         return await self.client.operations.get_operations(**kwagrs)
 
+    async def get_operations_by_cursor(self, **kwargs):
+        """Get operations using getOperationsByCursor method (returns all operations)"""
+        if self.sandbox:
+            # Sandbox doesn't support getOperationsByCursor, fallback to regular method
+            return await self.client.sandbox.get_sandbox_operations(**kwargs)
+
+        # getOperationsByCursor requires GetOperationsByCursorRequest object
+        from tinkoff.invest.schemas import GetOperationsByCursorRequest
+
+        # Extract parameters
+        account_id = kwargs.get('account_id', '')
+        from_date = kwargs.get('from_', None)
+        to_date = kwargs.get('to', None)
+
+        # Create request object
+        request = GetOperationsByCursorRequest(
+            account_id=account_id,
+            from_=from_date,
+            to=to_date
+        )
+
+        return await self.client.operations.get_operations_by_cursor(request)
+
     async def get_orders(self, **kwargs):
         if self.sandbox:
             return await self.client.sandbox.get_sandbox_orders(**kwargs)
@@ -111,26 +134,52 @@ class TinkoffClient:
 
         return await self.get_operations_for_period(account_id, start_date, end_date)
 
-    def get_profit_analysis(self, operations_response):
+    def get_fixed_profit_analysis(self, operations_response):
         """
-        Get profit analysis using the new ProfitCalculator with auto-detected starting positions
+        Get profit analysis using the fixed calculator that correctly handles API data types
 
-        This method now automatically detects starting positions to provide more accurate results
-        when working with partial data (e.g., loading operations for the last 100 days).
+        This method uses the FixedProfitCalculator which properly handles:
+        - MoneyValue conversion (units + nano/1e9)
+        - Real operation types from API (15=SELL, 22=BUY, 19=COMMISSION, etc.)
+        - Correct profit calculation matching table data
         """
-        if not operations_response or not operations_response.operations:
-            return [], 0.0, []
+        # Handle both list of operations and response object
+        operations = operations_response
+        if hasattr(operations_response, 'operations'):
+            operations = operations_response.operations
+
+        if not operations:
+            return {
+                'daily_data': {},
+                'summary': {
+                    'total_days': 0,
+                    'total_amount': 0,
+                    'total_buy': 0,
+                    'total_sell': 0,
+                    'total_commission': 0,
+                    'total_income': 0,
+                    'total_expense': 0,
+                    'total_other': 0,
+                    'total_trades': 0,
+                    'total_operations': 0,
+                    'net_profit': 0,
+                    'gross_profit': 0,
+                    'profit_margin': 0,
+                    'trade_volume': 0
+                },
+                'table_format': {
+                    'total_profit': 0,
+                    'total_commission': 0,
+                    'total_trades': 0,
+                    'profit_percentage': 0,
+                    'daily_breakdown': {}
+                }
+            }
 
         from app.utils.profit_calculator import ProfitCalculator
         calculator = ProfitCalculator()
 
-        # Use auto-detected starting positions for better accuracy
-        trades, total_profit, operations, starting_positions = calculator.process_operations_with_auto_positions(
-            operations_response.operations
-        )
-
-        # Return the traditional format for backward compatibility
-        return trades, total_profit, operations
+        return calculator.get_fixed_profit_analysis(operations)
 
     async def calculate_starting_positions(self, account_id: str, start_date, end_date):
         """
@@ -424,6 +473,275 @@ class TinkoffClient:
             logger.error(
                 f"Failed to get profit analysis with auto-detected positions: {e}")
             return [], 0.0, [], {}
+
+    async def get_all_operations_by_cursor(self, account_id: str, target_date=None, batch_size: int = 1000):
+        """
+        Get all operations up to target_date using cursor pagination
+
+        Args:
+            account_id: Account ID
+            target_date: Target date to get operations up to (if None, gets all operations)
+            batch_size: Number of operations per batch (max 1000)
+
+        Returns:
+            List of all operations up to target_date
+        """
+        if self.sandbox:
+            # Sandbox doesn't support getOperationsByCursor, fallback to regular method
+            return await self.get_operations(account_id=account_id)
+
+        from tinkoff.invest.schemas import GetOperationsByCursorRequest
+        import logging
+        logger = logging.getLogger(__name__)
+
+        all_operations = []
+        cursor = None  # Start with None for first request
+
+        try:
+            while True:
+                # Create request with cursor
+                request = GetOperationsByCursorRequest(
+                    account_id=account_id,
+                    limit=batch_size
+                )
+
+                # Add cursor if we have one
+                if cursor:
+                    request.cursor = cursor
+
+                # Get batch of operations
+                response = await self.client.operations.get_operations_by_cursor(request)
+
+                if not response or not response.items:
+                    logger.info("No more operations found")
+                    break
+
+                # Process operations in this batch
+                batch_operations = []
+                for item in response.items:
+                    # Normalize timezone for comparison
+                    item_date = item.date
+                    if target_date:
+                        # Normalize target_date timezone
+                        if target_date.tzinfo is None:
+                            import pytz
+                            target_date = pytz.UTC.localize(target_date)
+                        if item_date.tzinfo is None:
+                            import pytz
+                            item_date = pytz.UTC.localize(item_date)
+
+                        # Check if we've reached the target date
+                        if item_date <= target_date:
+                            # We've reached operations before target_date, stop
+                            logger.info(
+                                f"Reached target date {target_date}, stopping at operation date {item_date}")
+                            # Don't add this operation to the batch
+                            continue
+
+                    batch_operations.append(item)
+
+                all_operations.extend(batch_operations)
+                logger.info(
+                    f"Retrieved {len(batch_operations)} operations in this batch, total: {len(all_operations)}")
+
+                # Check if we've reached target date or no more operations
+                if target_date:
+                    # Check if any operation in this batch is before or equal to target_date
+                    reached_target = False
+                    for item in response.items:
+                        item_date = item.date
+                        if item_date.tzinfo is None:
+                            import pytz
+                            item_date = pytz.UTC.localize(item_date)
+                        if item_date <= target_date:
+                            reached_target = True
+                            break
+                    if reached_target:
+                        break
+
+                # Check if we have more operations to fetch
+                if not response.has_next:
+                    logger.info("No more operations available")
+                    break
+
+                # Get cursor for next batch
+                cursor = response.next_cursor
+                if not cursor:
+                    logger.info("No next cursor available")
+                    break
+
+        except Exception as e:
+            logger.error(f"Error fetching operations by cursor: {e}")
+            # Fallback to regular method
+            logger.info("Falling back to regular get_operations method")
+            return await self.get_operations(account_id=account_id)
+
+        logger.info(f"Total operations retrieved: {len(all_operations)}")
+        return all_operations
+
+    async def get_operations_with_limit_offset(self, account_id: str, start_date=None, end_date=None,
+                                               limit: int = 1000, offset: int = 0):
+        """
+        Get operations using limit and offset for pagination
+
+        Args:
+            account_id: Account ID
+            start_date: Start date for filtering operations
+            end_date: End date for filtering operations
+            limit: Number of operations to return (max 1000)
+            offset: Number of operations to skip
+
+        Returns:
+            List of operations for the specified period
+        """
+        if self.sandbox:
+            # Sandbox doesn't support getOperationsByCursor, fallback to regular method
+            return await self.get_operations(account_id=account_id, from_=start_date, to=end_date)
+
+        from tinkoff.invest.schemas import GetOperationsByCursorRequest
+        import logging
+        logger = logging.getLogger(__name__)
+
+        try:
+            # Create request with limit (offset is not supported in GetOperationsByCursorRequest)
+            # Use limit > 2 to avoid problems with duplicated operations and cursor movement
+            # Ensure limit > 2 as per API recommendations
+            safe_limit = max(limit, 3)
+            request = GetOperationsByCursorRequest(
+                account_id=account_id,
+                limit=safe_limit
+            )
+
+            # Add date filters if provided
+            if start_date:
+                request.from_ = start_date
+            if end_date:
+                request.to = end_date
+
+            # Get operations
+            response = await self.client.operations.get_operations_by_cursor(request)
+
+            if not response or not response.items:
+                logger.info("No operations found for the specified period")
+                return []
+
+            logger.info(
+                f"Retrieved {len(response.items)} operations (limit={limit})")
+            return response.items
+
+        except Exception as e:
+            logger.error(f"Error fetching operations with limit/offset: {e}")
+            # Fallback to regular method
+            logger.info("Falling back to regular get_operations method")
+            operations_response = await self.get_operations(account_id=account_id, from_=start_date, to=end_date)
+            if operations_response and hasattr(operations_response, 'operations'):
+                return operations_response.operations
+            return []
+
+    async def get_all_operations_for_period(self, account_id: str, start_date, end_date):
+        """
+        Get all operations for a specific period using cursor pagination
+
+        Args:
+            account_id: Account ID
+            start_date: Start date for the period
+            end_date: End date for the period
+
+        Returns:
+            List of all operations for the period
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        all_operations = []
+        cursor = None
+        limit = 1000  # Use limit > 2 to avoid cursor problems
+
+        try:
+            while True:
+                # Create request with cursor
+                from tinkoff.invest.schemas import GetOperationsByCursorRequest
+
+                request = GetOperationsByCursorRequest(
+                    account_id=account_id,
+                    limit=limit
+                )
+
+                # Add cursor if we have one
+                if cursor:
+                    request.cursor = cursor
+
+                # Add date filters if provided
+                if start_date:
+                    request.from_ = start_date
+                if end_date:
+                    request.to = end_date
+
+                # Get batch of operations
+                response = await self.client.operations.get_operations_by_cursor(request)
+
+                if not response or not response.items:
+                    logger.info("No more operations found")
+                    break
+
+                # Filter operations by date if needed (double-check)
+                filtered_operations = []
+                for item in response.items:
+                    item_date = item.date
+                    if start_date and item_date < start_date:
+                        continue
+                    if end_date and item_date > end_date:
+                        continue
+                    filtered_operations.append(item)
+
+                all_operations.extend(filtered_operations)
+                logger.info(
+                    f"Retrieved {len(filtered_operations)} operations, total: {len(all_operations)}")
+
+                # Check if we have more operations to fetch
+                if not response.has_next:
+                    logger.info("No more operations available")
+                    break
+
+                # Get cursor for next batch
+                cursor = response.next_cursor
+                if not cursor:
+                    logger.info("No next cursor available")
+                    break
+
+        except Exception as e:
+            logger.error(f"Error fetching all operations for period: {e}")
+            # Fallback to regular method
+            operations_response = await self.get_operations(account_id=account_id, from_=start_date, to=end_date)
+            if operations_response and hasattr(operations_response, 'operations'):
+                return operations_response.operations
+            return []
+
+        logger.info(f"Total operations for period: {len(all_operations)}")
+        return all_operations
+
+    async def get_operations_by_cursor(self, **kwargs):
+        """Get operations using getOperationsByCursor method (returns all operations)"""
+        if self.sandbox:
+            # Sandbox doesn't support getOperationsByCursor, fallback to regular method
+            return await self.client.sandbox.get_sandbox_operations(**kwargs)
+
+        # getOperationsByCursor requires GetOperationsByCursorRequest object
+        from tinkoff.invest.schemas import GetOperationsByCursorRequest
+
+        # Extract parameters
+        account_id = kwargs.get('account_id', '')
+        from_date = kwargs.get('from_', None)
+        to_date = kwargs.get('to', None)
+
+        # Create request object
+        request = GetOperationsByCursorRequest(
+            account_id=account_id,
+            from_=from_date,
+            to=to_date
+        )
+
+        return await self.client.operations.get_operations_by_cursor(request)
 
     async def get_enhanced_profit_analysis(self, account_id: str, start_date, end_date,
                                            use_current_positions: bool = True) -> Dict[str, Any]:

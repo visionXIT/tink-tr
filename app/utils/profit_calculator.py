@@ -11,6 +11,693 @@ from app.utils.quotation import quotation_to_float
 logger = logging.getLogger(__name__)
 
 
+class TableExactCalculator:
+    """
+    Калькулятор прибыли, точно воспроизводящий логику подсчета из таблиц
+
+    Этот калькулятор использует точную логику из таблиц:
+    - Заработок = сумма всех операций за день (включая вариационную маржу)
+    - Дневная клиринговая = вариационная маржа с 10:00 до 14:00
+    - Вечерняя клиринговая = вариационная маржа с 14:05 до 18:50 и остальное время
+    - Комиссии = операции типа BROKER_FEE
+    - Итоговая прибыль = заработок - комиссии
+    """
+
+    def __init__(self):
+        self.operation_types = {
+            15: "BUY",           # Покупка (отрицательные суммы)
+            22: "SELL",          # Продажа (положительные суммы)
+            19: "COMMISSION",     # Комиссии (небольшие отрицательные)
+            26: "INCOME",        # Доходы (положительные)
+            27: "EXPENSE",       # Расходы (отрицательные)
+        }
+
+    def convert_money_value(self, money_value) -> float:
+        """Конвертирует MoneyValue в число с правильным масштабированием"""
+        if hasattr(money_value, 'units') and hasattr(money_value, 'nano'):
+            return money_value.units + money_value.nano / 1e9
+        elif hasattr(money_value, 'currency'):
+            return money_value.units + money_value.nano / 1e9
+        else:
+            return float(money_value) if money_value else 0.0
+
+    def classify_operation(self, operation) -> Dict[str, Any]:
+        """Классифицирует операцию по типу с правильной обработкой данных"""
+        op_type = getattr(operation, 'type', getattr(
+            operation, 'operation_type', 'unknown'))
+        payment = getattr(operation, 'payment', None)
+
+        # Правильная конвертация суммы
+        amount_value = self.convert_money_value(payment) if payment else 0.0
+
+        # Определяем категорию операции
+        if op_type == 15:  # Покупка
+            category = "BUY"
+        elif op_type == 22:  # Продажа
+            category = "SELL"
+        elif op_type == 19:  # Комиссии
+            category = "COMMISSION"
+        elif op_type == 26:  # Доходы
+            category = "INCOME"
+        elif op_type == 27:  # Расходы
+            category = "EXPENSE"
+        else:
+            category = "OTHER"
+
+        return {
+            'type': op_type,
+            'type_name': self.operation_types.get(op_type, f"UNKNOWN_{op_type}"),
+            'amount': amount_value,
+            'category': category,
+            'date': operation.date,
+            'description': getattr(operation, 'description', ''),
+            'figi': getattr(operation, 'figi', ''),
+            'instrument_name': getattr(operation, 'name', '')
+        }
+
+    def calculate_daily_profit_exact_table_logic(self, operations: List[Any]) -> Dict[str, Dict[str, Any]]:
+        """
+        Рассчитывает прибыль по дням точно по логике таблиц
+
+        Логика из таблиц:
+        - Заработок = сумма всех операций за день (включая вариационную маржу)
+        - Дневная клиринговая = вариационная маржа с 10:00 до 14:00
+        - Вечерняя клиринговая = вариационная маржа с 14:05 до 18:50 и остальное время
+        - Комиссии = операции типа BROKER_FEE
+        - Итоговая прибыль = заработок - комиссии
+        """
+        daily_data = {}
+
+        for op in operations:
+            classified_op = self.classify_operation(op)
+            date_str = classified_op['date'].strftime('%Y-%m-%d')
+
+            if date_str not in daily_data:
+                daily_data[date_str] = {
+                    'date': date_str,
+                    'day_clearing': 0.0,      # Дневная клиринговая
+                    'evening_clearing': 0.0,   # Вечерняя клиринговая
+                    'commission': 0.0,         # Комиссии
+                    'trades_count': 0,         # Количество сделок
+                    # Общий заработок (как в таблице)
+                    'total_profit': 0.0,
+                    'operations': []
+                }
+
+            daily_data[date_str]['operations'].append(classified_op)
+
+            # Определяем тип операции и время
+            operation_hour = classified_op['date'].hour
+            operation_type = classified_op['type']
+
+            if operation_type == 19:  # Комиссии
+                daily_data[date_str]['commission'] += abs(
+                    classified_op['amount'])
+            elif operation_type in [15, 22]:  # Покупка/продажа
+                daily_data[date_str]['trades_count'] += 1
+                # Включаем в общий заработок (как в таблице)
+                daily_data[date_str]['total_profit'] += classified_op['amount']
+            elif operation_type in [26, 27]:  # Вариационная маржа
+                # Определяем дневная или вечерняя клиринговая по времени
+                # Дневная клиринговая (10:00-14:00)
+                if 10 <= operation_hour <= 13:
+                    daily_data[date_str]['day_clearing'] += classified_op['amount']
+                else:  # Вечерняя клиринговая (14:05-18:50 и остальное время)
+                    daily_data[date_str]['evening_clearing'] += classified_op['amount']
+
+                # Вариационная маржа тоже включается в общий заработок (как в таблице)
+                daily_data[date_str]['total_profit'] += classified_op['amount']
+            else:
+                # Прочие операции тоже включаем в общий заработок (как в таблице)
+                daily_data[date_str]['total_profit'] += classified_op['amount']
+
+        return daily_data
+
+    def calculate_period_summary_exact_table_logic(self, daily_data: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Рассчитывает сводку за период точно по логике таблиц
+        """
+        summary = {
+            'total_days': len(daily_data),
+            'total_profit': 0.0,  # Итоговая прибыль (заработок - комиссии)
+            'total_commission': 0.0,
+            'total_trades': 0,
+            'total_day_clearing': 0.0,
+            'total_evening_clearing': 0.0,
+            'total_earnings': 0.0,  # Общий заработок (сумма всех операций)
+            'daily_breakdown': daily_data
+        }
+
+        for date, data in daily_data.items():
+            # Общий заработок
+            summary['total_earnings'] += data['total_profit']
+            summary['total_commission'] += data['commission']
+            summary['total_trades'] += data['trades_count']
+            summary['total_day_clearing'] += data['day_clearing']
+            summary['total_evening_clearing'] += data['evening_clearing']
+
+        # Итоговая прибыль = заработок - комиссии (как в таблице)
+        summary['total_profit'] = summary['total_earnings'] - \
+            summary['total_commission']
+
+        return summary
+
+    def calculate_balance_progression_exact(self, operations: List[Any], starting_balance: float) -> Dict[str, float]:
+        """
+        Рассчитывает прогрессию баланса точно по логике таблиц
+        """
+        if not operations:
+            return {}
+
+        # Сортируем операции по дате
+        sorted_operations = sorted(operations, key=lambda x: x.date)
+
+        # Группируем операции по дням
+        daily_operations = defaultdict(list)
+        for op in sorted_operations:
+            date_str = op.date.strftime('%Y-%m-%d')
+            daily_operations[date_str].append(op)
+
+        # Рассчитываем баланс для каждого дня
+        balance_progression = {}
+        current_balance = starting_balance
+
+        # Находим самую раннюю дату
+        earliest_date = min(daily_operations.keys())
+
+        # Устанавливаем начальный баланс для самой ранней даты
+        balance_progression[earliest_date] = starting_balance
+
+        # Рассчитываем баланс для каждого дня
+        for date_str in sorted(daily_operations.keys()):
+            if date_str != earliest_date:
+                # Баланс на начало дня = баланс предыдущего дня
+                current_balance = balance_progression.get(
+                    prev_date, starting_balance)
+
+            # Суммируем все операции за день (как в таблице)
+            daily_profit = 0.0
+            daily_commission = 0.0
+
+            for op in daily_operations[date_str]:
+                payment = self.convert_money_value(op.payment)
+                op_type = getattr(op, 'operation_type',
+                                  getattr(op, 'type', None))
+
+                if op_type == 19:  # Комиссии
+                    daily_commission += abs(payment)
+                else:
+                    # Все остальные операции включаем в прибыль
+                    daily_profit += payment
+
+            # Итоговая прибыль за день = общая прибыль - комиссии (как в таблице)
+            net_daily_profit = daily_profit - daily_commission
+
+            # Баланс на конец дня = баланс начала дня + чистая прибыль за день
+            current_balance += net_daily_profit
+            balance_progression[date_str] = current_balance
+
+            prev_date = date_str
+
+        return balance_progression
+
+    def get_exact_table_analysis(self, operations: List[Any], starting_balance: float = 0.0) -> Dict[str, Any]:
+        """
+        Возвращает анализ точно по логике таблиц
+
+        Args:
+            operations: Список операций
+            starting_balance: Начальный баланс
+
+        Returns:
+            Словарь с анализом точно по логике таблиц
+        """
+        if not operations:
+            return {
+                'daily_data': {},
+                'summary': {
+                    'total_profit': 0.0,
+                    'total_commission': 0.0,
+                    'total_trades': 0,
+                    'total_day_clearing': 0.0,
+                    'total_evening_clearing': 0.0,
+                    'total_earnings': 0.0
+                },
+                'balance_progression': {},
+                'table_format': {
+                    'total_profit': 0.0,
+                    'total_commission': 0.0,
+                    'total_trades': 0,
+                    'daily_breakdown': {}
+                }
+            }
+
+        # Рассчитываем данные по дням
+        daily_data = self.calculate_daily_profit_exact_table_logic(operations)
+
+        # Рассчитываем сводку за период
+        summary = self.calculate_period_summary_exact_table_logic(daily_data)
+
+        # Рассчитываем прогрессию баланса
+        balance_progression = self.calculate_balance_progression_exact(
+            operations, starting_balance)
+
+        # Формируем формат таблицы
+        table_format = {
+            'total_profit': summary['total_profit'],
+            'total_commission': summary['total_commission'],
+            'total_trades': summary['total_trades'],
+            'daily_breakdown': daily_data
+        }
+
+        return {
+            'daily_data': daily_data,
+            'summary': summary,
+            'balance_progression': balance_progression,
+            'table_format': table_format
+        }
+
+
+class TableCompatibleProfitCalculator:
+    """
+    Калькулятор прибыли, совместимый с логикой подсчета из таблиц
+
+    Этот калькулятор точно воспроизводит логику подсчета из таблиц:
+    - Правильная обработка вариационной маржи (дневная и вечерняя клиринговая)
+    - Корректный подсчет комиссий
+    - Точный расчет балансов на начало и конец периода
+    - Правильная группировка операций по дням
+    """
+
+    def __init__(self):
+        self.operation_types = {
+            15: "BUY",           # Покупка (отрицательные суммы)
+            22: "SELL",          # Продажа (положительные суммы)
+            19: "COMMISSION",     # Комиссии (небольшие отрицательные)
+            26: "INCOME",        # Доходы (положительные)
+            27: "EXPENSE",       # Расходы (отрицательные)
+        }
+
+    def convert_money_value(self, money_value) -> float:
+        """Конвертирует MoneyValue в число с правильным масштабированием"""
+        if hasattr(money_value, 'units') and hasattr(money_value, 'nano'):
+            return money_value.units + money_value.nano / 1e9
+        elif hasattr(money_value, 'currency'):
+            return money_value.units + money_value.nano / 1e9
+        else:
+            return float(money_value) if money_value else 0.0
+
+    def classify_operation(self, operation) -> Dict[str, Any]:
+        """Классифицирует операцию по типу с правильной обработкой данных"""
+        op_type = getattr(operation, 'type', getattr(
+            operation, 'operation_type', 'unknown'))
+        payment = getattr(operation, 'payment', None)
+
+        # Правильная конвертация суммы
+        amount_value = self.convert_money_value(payment) if payment else 0.0
+
+        # Определяем категорию операции
+        if op_type == 15:  # Покупка
+            category = "BUY"
+        elif op_type == 22:  # Продажа
+            category = "SELL"
+        elif op_type == 19:  # Комиссии
+            category = "COMMISSION"
+        elif op_type == 26:  # Доходы
+            category = "INCOME"
+        elif op_type == 27:  # Расходы
+            category = "EXPENSE"
+        else:
+            category = "OTHER"
+
+        return {
+            'type': op_type,
+            'type_name': self.operation_types.get(op_type, f"UNKNOWN_{op_type}"),
+            'amount': amount_value,
+            'category': category,
+            'date': operation.date,
+            'description': getattr(operation, 'description', ''),
+            'figi': getattr(operation, 'figi', ''),
+            'instrument_name': getattr(operation, 'name', '')
+        }
+
+    def calculate_daily_profit_table_compatible(self, operations: List[Any]) -> Dict[str, Dict[str, Any]]:
+        """
+        Рассчитывает прибыль по дням в формате, совместимом с таблицами
+
+        Логика соответствует таблицам:
+        - Дневная клиринговая: вариационная маржа с 10:00 до 14:00
+        - Вечерняя клиринговая: вариационная маржа с 14:05 до 18:50 и остальное время
+        - Комиссии: операции типа BROKER_FEE
+        - Заработок: сумма всех операций за день
+        """
+        daily_data = {}
+
+        for op in operations:
+            classified_op = self.classify_operation(op)
+            date_str = classified_op['date'].strftime('%Y-%m-%d')
+
+            if date_str not in daily_data:
+                daily_data[date_str] = {
+                    'date': date_str,
+                    'day_clearing': 0.0,      # Дневная клиринговая
+                    'evening_clearing': 0.0,   # Вечерняя клиринговая
+                    'commission': 0.0,         # Комиссии
+                    'trades_count': 0,         # Количество сделок
+                    'total_profit': 0.0,       # Общий заработок
+                    'operations': []
+                }
+
+            daily_data[date_str]['operations'].append(classified_op)
+
+            # Определяем тип операции и время
+            operation_hour = classified_op['date'].hour
+            operation_type = classified_op['type']
+
+            if operation_type == 19:  # Комиссии
+                daily_data[date_str]['commission'] += abs(
+                    classified_op['amount'])
+            elif operation_type in [15, 22]:  # Покупка/продажа
+                daily_data[date_str]['trades_count'] += 1
+                daily_data[date_str]['total_profit'] += classified_op['amount']
+            elif operation_type in [26, 27]:  # Вариационная маржа
+                # Определяем дневная или вечерняя клиринговая по времени
+                # Дневная клиринговая (10:00-14:00)
+                if 10 <= operation_hour <= 13:
+                    daily_data[date_str]['day_clearing'] += classified_op['amount']
+                else:  # Вечерняя клиринговая (14:05-18:50 и остальное время)
+                    daily_data[date_str]['evening_clearing'] += classified_op['amount']
+
+                # Вариационная маржа тоже включается в общий заработок
+                daily_data[date_str]['total_profit'] += classified_op['amount']
+            else:
+                # Прочие операции тоже включаем в общий заработок
+                daily_data[date_str]['total_profit'] += classified_op['amount']
+
+        return daily_data
+
+    def calculate_period_summary_table_compatible(self, daily_data: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Рассчитывает сводку за период в формате, совместимом с таблицами
+        """
+        summary = {
+            'total_days': len(daily_data),
+            'total_profit': 0.0,
+            'total_commission': 0.0,
+            'total_trades': 0,
+            'total_day_clearing': 0.0,
+            'total_evening_clearing': 0.0,
+            'daily_breakdown': daily_data
+        }
+
+        for date, data in daily_data.items():
+            summary['total_profit'] += data['total_profit']
+            summary['total_commission'] += data['commission']
+            summary['total_trades'] += data['trades_count']
+            summary['total_day_clearing'] += data['day_clearing']
+            summary['total_evening_clearing'] += data['evening_clearing']
+
+        return summary
+
+    def calculate_balance_progression(self, operations: List[Any], starting_balance: float) -> Dict[str, float]:
+        """
+        Рассчитывает прогрессию баланса по дням
+
+        Args:
+            operations: Список операций
+            starting_balance: Начальный баланс
+
+        Returns:
+            Словарь {дата: баланс}
+        """
+        if not operations:
+            return {}
+
+        # Сортируем операции по дате
+        sorted_operations = sorted(operations, key=lambda x: x.date)
+
+        # Группируем операции по дням
+        daily_operations = defaultdict(list)
+        for op in sorted_operations:
+            date_str = op.date.strftime('%Y-%m-%d')
+            daily_operations[date_str].append(op)
+
+        # Рассчитываем баланс для каждого дня
+        balance_progression = {}
+        current_balance = starting_balance
+
+        # Находим самую раннюю дату
+        earliest_date = min(daily_operations.keys())
+
+        # Устанавливаем начальный баланс для самой ранней даты
+        balance_progression[earliest_date] = starting_balance
+
+        # Рассчитываем баланс для каждого дня
+        for date_str in sorted(daily_operations.keys()):
+            if date_str != earliest_date:
+                # Баланс на начало дня = баланс предыдущего дня
+                current_balance = balance_progression.get(
+                    prev_date, starting_balance)
+
+            # Суммируем все операции за день
+            daily_profit = 0.0
+            for op in daily_operations[date_str]:
+                payment = self.convert_money_value(op.payment)
+                daily_profit += payment
+
+            # Баланс на конец дня = баланс начала дня + прибыль за день
+            current_balance += daily_profit
+            balance_progression[date_str] = current_balance
+
+            prev_date = date_str
+
+        return balance_progression
+
+    def get_table_compatible_analysis(self, operations: List[Any], starting_balance: float = 0.0) -> Dict[str, Any]:
+        """
+        Возвращает анализ в формате, совместимом с таблицами
+
+        Args:
+            operations: Список операций
+            starting_balance: Начальный баланс
+
+        Returns:
+            Словарь с анализом в формате таблиц
+        """
+        if not operations:
+            return {
+                'daily_data': {},
+                'summary': {
+                    'total_profit': 0.0,
+                    'total_commission': 0.0,
+                    'total_trades': 0,
+                    'total_day_clearing': 0.0,
+                    'total_evening_clearing': 0.0
+                },
+                'balance_progression': {},
+                'table_format': {
+                    'total_profit': 0.0,
+                    'total_commission': 0.0,
+                    'total_trades': 0,
+                    'daily_breakdown': {}
+                }
+            }
+
+        # Рассчитываем данные по дням
+        daily_data = self.calculate_daily_profit_table_compatible(operations)
+
+        # Рассчитываем сводку
+        summary = self.calculate_period_summary_table_compatible(daily_data)
+
+        # Рассчитываем прогрессию баланса
+        balance_progression = self.calculate_balance_progression(
+            operations, starting_balance)
+
+        return {
+            'daily_data': daily_data,
+            'summary': summary,
+            'balance_progression': balance_progression,
+            'table_format': {
+                'total_profit': summary['total_profit'],
+                'total_commission': summary['total_commission'],
+                'total_trades': summary['total_trades'],
+                'total_day_clearing': summary['total_day_clearing'],
+                'total_evening_clearing': summary['total_evening_clearing'],
+                'daily_breakdown': daily_data
+            }
+        }
+
+
+class FixedProfitCalculator:
+    """Исправленный калькулятор прибыли на основе реальных типов операций API"""
+
+    def __init__(self):
+        # Реальные типы операций из API Tinkoff
+        self.operation_types = {
+            15: "BUY",           # Покупка (отрицательные суммы)
+            22: "SELL",          # Продажа (положительные суммы)
+            19: "COMMISSION",     # Комиссии (небольшие отрицательные)
+            26: "INCOME",        # Доходы (положительные)
+            27: "EXPENSE",       # Расходы (отрицательные)
+        }
+
+    def convert_money_value(self, money_value) -> float:
+        """Конвертирует MoneyValue в число с правильным масштабированием"""
+        if hasattr(money_value, 'units') and hasattr(money_value, 'nano'):
+            # Правильная конвертация: units + nano/1e9
+            return money_value.units + money_value.nano / 1e9
+        elif hasattr(money_value, 'currency'):
+            # Если это MoneyValue объект
+            return money_value.units + money_value.nano / 1e9
+        else:
+            return float(money_value) if money_value else 0.0
+
+    def classify_operation(self, operation) -> Dict[str, Any]:
+        """Классифицирует операцию по типу с правильной обработкой данных"""
+        op_type = getattr(operation, 'type', getattr(
+            operation, 'operation_type', 'unknown'))
+        payment = getattr(operation, 'payment', None)
+
+        # Правильная конвертация суммы
+        amount_value = self.convert_money_value(payment) if payment else 0.0
+
+        # Определяем категорию операции
+        if op_type == 15:  # Покупка
+            category = "BUY"
+        elif op_type == 22:  # Продажа
+            category = "SELL"
+        elif op_type == 19:  # Комиссии
+            category = "COMMISSION"
+        elif op_type == 26:  # Доходы
+            category = "INCOME"
+        elif op_type == 27:  # Расходы
+            category = "EXPENSE"
+        else:
+            category = "OTHER"
+
+        return {
+            'type': op_type,
+            'type_name': self.operation_types.get(op_type, f"UNKNOWN_{op_type}"),
+            'amount': amount_value,
+            'category': category,
+            'date': operation.date,
+            'description': getattr(operation, 'description', ''),
+            'figi': getattr(operation, 'figi', ''),
+            'instrument_name': getattr(operation, 'name', '')
+        }
+
+    def calculate_daily_profit(self, operations: List[Any]) -> Dict[str, Dict[str, Any]]:
+        """Рассчитывает прибыль по дням с правильной обработкой данных"""
+        daily_data = {}
+
+        for op in operations:
+            classified_op = self.classify_operation(op)
+            date_str = classified_op['date'].strftime('%Y-%m-%d')
+
+            if date_str not in daily_data:
+                daily_data[date_str] = {
+                    'date': date_str,
+                    'total_amount': 0,
+                    'buy_amount': 0,
+                    'sell_amount': 0,
+                    'commission': 0,
+                    'income': 0,
+                    'expense': 0,
+                    'other': 0,
+                    'trades_count': 0,
+                    'operations_count': 0,
+                    'operations': []
+                }
+
+            daily_data[date_str]['operations'].append(classified_op)
+            daily_data[date_str]['total_amount'] += classified_op['amount']
+            daily_data[date_str]['operations_count'] += 1
+
+            # Распределяем по категориям
+            if classified_op['category'] == 'BUY':
+                # Берем модуль
+                daily_data[date_str]['buy_amount'] += abs(
+                    classified_op['amount'])
+                daily_data[date_str]['trades_count'] += 1
+            elif classified_op['category'] == 'SELL':
+                daily_data[date_str]['sell_amount'] += classified_op['amount']
+                daily_data[date_str]['trades_count'] += 1
+            elif classified_op['category'] == 'COMMISSION':
+                # Берем модуль
+                daily_data[date_str]['commission'] += abs(
+                    classified_op['amount'])
+            elif classified_op['category'] == 'INCOME':
+                daily_data[date_str]['income'] += classified_op['amount']
+            elif classified_op['category'] == 'EXPENSE':
+                # Берем модуль
+                daily_data[date_str]['expense'] += abs(classified_op['amount'])
+            else:
+                daily_data[date_str]['other'] += classified_op['amount']
+
+        return daily_data
+
+    def calculate_period_summary(self, daily_data: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+        """Рассчитывает сводку за период с правильными формулами"""
+        summary = {
+            'total_days': len(daily_data),
+            'total_amount': 0,
+            'total_buy': 0,
+            'total_sell': 0,
+            'total_commission': 0,
+            'total_income': 0,
+            'total_expense': 0,
+            'total_other': 0,
+            'total_trades': 0,
+            'total_operations': 0,
+            'net_profit': 0,  # Чистая прибыль (продажи - покупки - комиссии)
+            'gross_profit': 0,  # Валовая прибыль (все доходы)
+            'profit_margin': 0,  # Маржа прибыли
+            'trade_volume': 0   # Объем торговли
+        }
+
+        for date, data in daily_data.items():
+            summary['total_amount'] += data['total_amount']
+            summary['total_buy'] += data['buy_amount']
+            summary['total_sell'] += data['sell_amount']
+            summary['total_commission'] += data['commission']
+            summary['total_income'] += data['income']
+            summary['total_expense'] += data['expense']
+            summary['total_other'] += data['other']
+            summary['total_trades'] += data['trades_count']
+            summary['total_operations'] += data['operations_count']
+
+        # Рассчитываем чистую прибыль (как в таблице)
+        summary['net_profit'] = summary['total_sell'] - \
+            summary['total_buy'] - summary['total_commission']
+        summary['gross_profit'] = summary['total_sell'] + \
+            summary['total_income']
+        summary['trade_volume'] = summary['total_buy'] + summary['total_sell']
+
+        # Рассчитываем маржу прибыли
+        if summary['trade_volume'] != 0:
+            summary['profit_margin'] = (
+                summary['net_profit'] / summary['trade_volume']) * 100
+
+        return summary
+
+    def get_table_compatible_profit(self, operations: List[Any]) -> Dict[str, Any]:
+        """Возвращает прибыль в формате, совместимом с таблицей"""
+        daily_data = self.calculate_daily_profit(operations)
+        summary = self.calculate_period_summary(daily_data)
+
+        return {
+            'daily_data': daily_data,
+            'summary': summary,
+            'table_format': {
+                'total_profit': summary['net_profit'],
+                'total_commission': summary['total_commission'],
+                'total_trades': summary['total_trades'],
+                'profit_percentage': summary['profit_margin'],
+                'daily_breakdown': daily_data
+            }
+        }
+
+
 @dataclass
 class TradingSession:
     """Represents a trading session with multiple operations"""
@@ -75,6 +762,8 @@ class ProfitCalculator:
     def __init__(self, timezone_offset: int = 3):
         self.timezone_offset = timezone_offset
         self.reset()
+        # Добавляем исправленный калькулятор
+        self.fixed_calculator = FixedProfitCalculator()
 
     def reset(self):
         """Reset the calculator state"""
@@ -87,6 +776,10 @@ class ProfitCalculator:
     def correct_timezone(self, date: datetime.datetime) -> datetime.datetime:
         """Apply timezone correction"""
         return date + datetime.timedelta(hours=self.timezone_offset)
+
+    def get_fixed_profit_analysis(self, operations: List[Any]) -> Dict[str, Any]:
+        """Получает анализ прибыли с исправленными расчетами"""
+        return self.fixed_calculator.get_table_compatible_profit(operations)
 
     def process_operations(self, operations: List[Any]) -> Tuple[List[Trade], float, List[Any]]:
         """

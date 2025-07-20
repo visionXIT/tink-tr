@@ -1,0 +1,780 @@
+{
+  "daily_data": {
+    "2025-03-31": {
+      "date": "2025-03-31",
+      "day_clearing": -937.22,
+      "evening_clearing": -234.1,
+      "commission": 345.83,
+      "trades_count": 1,
+      "total_profit": -2688.47,
+      "operations": [
+        {
+          "type": 22,
+          "type_name": "SELL",
+          "amount": -1517.15,
+          "category": "SELL",
+          "date": "2025-03-31 15:00:00",
+          "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-03-31",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 19,
+          "type_name": "COMMISSION",
+          "amount": -345.83,
+          "category": "COMMISSION",
+          "date": "2025-03-31 16:00:00",
+          "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 27,
+          "type_name": "EXPENSE",
+          "amount": -937.22,
+          "category": "EXPENSE",
+          "date": "2025-03-31 12:00:00",
+          "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 27,
+          "type_name": "EXPENSE",
+          "amount": -234.1,
+          "category": "EXPENSE",
+          "date": "2025-03-31 18:00:00",
+          "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        }
+      ]
+    },
+    "2025-04-01": {
+      "date": "2025-04-01",
+      "day_clearing": -957.54,
+      "evening_clearing": -688.96,
+      "commission": 732.77,
+      "trades_count": 1,
+      "total_profit": -4025.77,
+      "operations": [
+        {
+          "type": 22,
+          "type_name": "SELL",
+          "amount": -2379.27,
+          "category": "SELL",
+          "date": "2025-04-01 15:00:00",
+          "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-04-01",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 19,
+          "type_name": "COMMISSION",
+          "amount": -732.77,
+          "category": "COMMISSION",
+          "date": "2025-04-01 16:00:00",
+          "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 27,
+          "type_name": "EXPENSE",
+          "amount": -957.54,
+          "category": "EXPENSE",
+          "date": "2025-04-01 12:00:00",
+          "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 27,
+          "type_name": "EXPENSE",
+          "amount": -688.96,
+          "category": "EXPENSE",
+          "date": "2025-04-01 18:00:00",
+          "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        }
+      ]
+    },
+    "2025-04-02": {
+      "date": "2025-04-02",
+      "day_clearing": -645.5,
+      "evening_clearing": -885.37,
+      "commission": 552.16,
+      "trades_count": 1,
+      "total_profit": -3613.9,
+      "operations": [
+        {
+          "type": 22,
+          "type_name": "SELL",
+          "amount": -2083.03,
+          "category": "SELL",
+          "date": "2025-04-02 15:00:00",
+          "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-04-02",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 19,
+          "type_name": "COMMISSION",
+          "amount": -552.16,
+          "category": "COMMISSION",
+          "date": "2025-04-02 16:00:00",
+          "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 27,
+          "type_name": "EXPENSE",
+          "amount": -645.5,
+          "category": "EXPENSE",
+          "date": "2025-04-02 12:00:00",
+          "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 27,
+          "type_name": "EXPENSE",
+          "amount": -885.37,
+          "category": "EXPENSE",
+          "date": "2025-04-02 18:00:00",
+          "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        }
+      ]
+    },
+    "2025-04-03": {
+      "date": "2025-04-03",
+      "day_clearing": 659.53,
+      "evening_clearing": -1216.49,
+      "commission": 390.77,
+      "trades_count": 1,
+      "total_profit": -1504.69,
+      "operations": [
+        {
+          "type": 22,
+          "type_name": "SELL",
+          "amount": -947.73,
+          "category": "SELL",
+          "date": "2025-04-03 15:00:00",
+          "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-04-03",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 19,
+          "type_name": "COMMISSION",
+          "amount": -390.77,
+          "category": "COMMISSION",
+          "date": "2025-04-03 16:00:00",
+          "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 26,
+          "type_name": "INCOME",
+          "amount": 659.53,
+          "category": "INCOME",
+          "date": "2025-04-03 12:00:00",
+          "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 27,
+          "type_name": "EXPENSE",
+          "amount": -1216.49,
+          "category": "EXPENSE",
+          "date": "2025-04-03 18:00:00",
+          "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        }
+      ]
+    },
+    "2025-04-04": {
+      "date": "2025-04-04",
+      "day_clearing": 6067.16,
+      "evening_clearing": 902.59,
+      "commission": 114.66,
+      "trades_count": 1,
+      "total_profit": 13824.84,
+      "operations": [
+        {
+          "type": 22,
+          "type_name": "SELL",
+          "amount": 6855.09,
+          "category": "SELL",
+          "date": "2025-04-04 15:00:00",
+          "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-04-04",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 19,
+          "type_name": "COMMISSION",
+          "amount": -114.66,
+          "category": "COMMISSION",
+          "date": "2025-04-04 16:00:00",
+          "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 26,
+          "type_name": "INCOME",
+          "amount": 6067.16,
+          "category": "INCOME",
+          "date": "2025-04-04 12:00:00",
+          "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        },
+        {
+          "type": 26,
+          "type_name": "INCOME",
+          "amount": 902.59,
+          "category": "INCOME",
+          "date": "2025-04-04 18:00:00",
+          "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+          "figi": "BBG0013HGFT4",
+          "instrument_name": ""
+        }
+      ]
+    }
+  },
+  "summary": {
+    "total_days": 5,
+    "total_profit": 1992.0100000000002,
+    "total_commission": 2136.1899999999996,
+    "total_trades": 5,
+    "total_day_clearing": 4186.429999999999,
+    "total_evening_clearing": -2122.33,
+    "daily_breakdown": {
+      "2025-03-31": {
+        "date": "2025-03-31",
+        "day_clearing": -937.22,
+        "evening_clearing": -234.1,
+        "commission": 345.83,
+        "trades_count": 1,
+        "total_profit": -2688.47,
+        "operations": [
+          {
+            "type": 22,
+            "type_name": "SELL",
+            "amount": -1517.15,
+            "category": "SELL",
+            "date": "2025-03-31 15:00:00",
+            "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-03-31",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 19,
+            "type_name": "COMMISSION",
+            "amount": -345.83,
+            "category": "COMMISSION",
+            "date": "2025-03-31 16:00:00",
+            "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 27,
+            "type_name": "EXPENSE",
+            "amount": -937.22,
+            "category": "EXPENSE",
+            "date": "2025-03-31 12:00:00",
+            "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 27,
+            "type_name": "EXPENSE",
+            "amount": -234.1,
+            "category": "EXPENSE",
+            "date": "2025-03-31 18:00:00",
+            "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          }
+        ]
+      },
+      "2025-04-01": {
+        "date": "2025-04-01",
+        "day_clearing": -957.54,
+        "evening_clearing": -688.96,
+        "commission": 732.77,
+        "trades_count": 1,
+        "total_profit": -4025.77,
+        "operations": [
+          {
+            "type": 22,
+            "type_name": "SELL",
+            "amount": -2379.27,
+            "category": "SELL",
+            "date": "2025-04-01 15:00:00",
+            "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-04-01",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 19,
+            "type_name": "COMMISSION",
+            "amount": -732.77,
+            "category": "COMMISSION",
+            "date": "2025-04-01 16:00:00",
+            "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 27,
+            "type_name": "EXPENSE",
+            "amount": -957.54,
+            "category": "EXPENSE",
+            "date": "2025-04-01 12:00:00",
+            "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 27,
+            "type_name": "EXPENSE",
+            "amount": -688.96,
+            "category": "EXPENSE",
+            "date": "2025-04-01 18:00:00",
+            "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          }
+        ]
+      },
+      "2025-04-02": {
+        "date": "2025-04-02",
+        "day_clearing": -645.5,
+        "evening_clearing": -885.37,
+        "commission": 552.16,
+        "trades_count": 1,
+        "total_profit": -3613.9,
+        "operations": [
+          {
+            "type": 22,
+            "type_name": "SELL",
+            "amount": -2083.03,
+            "category": "SELL",
+            "date": "2025-04-02 15:00:00",
+            "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-04-02",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 19,
+            "type_name": "COMMISSION",
+            "amount": -552.16,
+            "category": "COMMISSION",
+            "date": "2025-04-02 16:00:00",
+            "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 27,
+            "type_name": "EXPENSE",
+            "amount": -645.5,
+            "category": "EXPENSE",
+            "date": "2025-04-02 12:00:00",
+            "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 27,
+            "type_name": "EXPENSE",
+            "amount": -885.37,
+            "category": "EXPENSE",
+            "date": "2025-04-02 18:00:00",
+            "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          }
+        ]
+      },
+      "2025-04-03": {
+        "date": "2025-04-03",
+        "day_clearing": 659.53,
+        "evening_clearing": -1216.49,
+        "commission": 390.77,
+        "trades_count": 1,
+        "total_profit": -1504.69,
+        "operations": [
+          {
+            "type": 22,
+            "type_name": "SELL",
+            "amount": -947.73,
+            "category": "SELL",
+            "date": "2025-04-03 15:00:00",
+            "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-04-03",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 19,
+            "type_name": "COMMISSION",
+            "amount": -390.77,
+            "category": "COMMISSION",
+            "date": "2025-04-03 16:00:00",
+            "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 26,
+            "type_name": "INCOME",
+            "amount": 659.53,
+            "category": "INCOME",
+            "date": "2025-04-03 12:00:00",
+            "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 27,
+            "type_name": "EXPENSE",
+            "amount": -1216.49,
+            "category": "EXPENSE",
+            "date": "2025-04-03 18:00:00",
+            "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          }
+        ]
+      },
+      "2025-04-04": {
+        "date": "2025-04-04",
+        "day_clearing": 6067.16,
+        "evening_clearing": 902.59,
+        "commission": 114.66,
+        "trades_count": 1,
+        "total_profit": 13824.84,
+        "operations": [
+          {
+            "type": 22,
+            "type_name": "SELL",
+            "amount": 6855.09,
+            "category": "SELL",
+            "date": "2025-04-04 15:00:00",
+            "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-04-04",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 19,
+            "type_name": "COMMISSION",
+            "amount": -114.66,
+            "category": "COMMISSION",
+            "date": "2025-04-04 16:00:00",
+            "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 26,
+            "type_name": "INCOME",
+            "amount": 6067.16,
+            "category": "INCOME",
+            "date": "2025-04-04 12:00:00",
+            "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 26,
+            "type_name": "INCOME",
+            "amount": 902.59,
+            "category": "INCOME",
+            "date": "2025-04-04 18:00:00",
+            "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          }
+        ]
+      }
+    }
+  },
+  "balance_progression": {
+    "2025-03-31": 41093.09,
+    "2025-04-01": 36334.549999999996,
+    "2025-04-02": 32168.489999999994,
+    "2025-04-03": 30273.029999999995,
+    "2025-04-04": 43983.20999999999
+  },
+  "table_format": {
+    "total_profit": 1992.0100000000002,
+    "total_commission": 2136.1899999999996,
+    "total_trades": 5,
+    "total_day_clearing": 4186.429999999999,
+    "total_evening_clearing": -2122.33,
+    "daily_breakdown": {
+      "2025-03-31": {
+        "date": "2025-03-31",
+        "day_clearing": -937.22,
+        "evening_clearing": -234.1,
+        "commission": 345.83,
+        "trades_count": 1,
+        "total_profit": -2688.47,
+        "operations": [
+          {
+            "type": 22,
+            "type_name": "SELL",
+            "amount": -1517.15,
+            "category": "SELL",
+            "date": "2025-03-31 15:00:00",
+            "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-03-31",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 19,
+            "type_name": "COMMISSION",
+            "amount": -345.83,
+            "category": "COMMISSION",
+            "date": "2025-03-31 16:00:00",
+            "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 27,
+            "type_name": "EXPENSE",
+            "amount": -937.22,
+            "category": "EXPENSE",
+            "date": "2025-03-31 12:00:00",
+            "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 27,
+            "type_name": "EXPENSE",
+            "amount": -234.1,
+            "category": "EXPENSE",
+            "date": "2025-03-31 18:00:00",
+            "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          }
+        ]
+      },
+      "2025-04-01": {
+        "date": "2025-04-01",
+        "day_clearing": -957.54,
+        "evening_clearing": -688.96,
+        "commission": 732.77,
+        "trades_count": 1,
+        "total_profit": -4025.77,
+        "operations": [
+          {
+            "type": 22,
+            "type_name": "SELL",
+            "amount": -2379.27,
+            "category": "SELL",
+            "date": "2025-04-01 15:00:00",
+            "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-04-01",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 19,
+            "type_name": "COMMISSION",
+            "amount": -732.77,
+            "category": "COMMISSION",
+            "date": "2025-04-01 16:00:00",
+            "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 27,
+            "type_name": "EXPENSE",
+            "amount": -957.54,
+            "category": "EXPENSE",
+            "date": "2025-04-01 12:00:00",
+            "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 27,
+            "type_name": "EXPENSE",
+            "amount": -688.96,
+            "category": "EXPENSE",
+            "date": "2025-04-01 18:00:00",
+            "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          }
+        ]
+      },
+      "2025-04-02": {
+        "date": "2025-04-02",
+        "day_clearing": -645.5,
+        "evening_clearing": -885.37,
+        "commission": 552.16,
+        "trades_count": 1,
+        "total_profit": -3613.9,
+        "operations": [
+          {
+            "type": 22,
+            "type_name": "SELL",
+            "amount": -2083.03,
+            "category": "SELL",
+            "date": "2025-04-02 15:00:00",
+            "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-04-02",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 19,
+            "type_name": "COMMISSION",
+            "amount": -552.16,
+            "category": "COMMISSION",
+            "date": "2025-04-02 16:00:00",
+            "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 27,
+            "type_name": "EXPENSE",
+            "amount": -645.5,
+            "category": "EXPENSE",
+            "date": "2025-04-02 12:00:00",
+            "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 27,
+            "type_name": "EXPENSE",
+            "amount": -885.37,
+            "category": "EXPENSE",
+            "date": "2025-04-02 18:00:00",
+            "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          }
+        ]
+      },
+      "2025-04-03": {
+        "date": "2025-04-03",
+        "day_clearing": 659.53,
+        "evening_clearing": -1216.49,
+        "commission": 390.77,
+        "trades_count": 1,
+        "total_profit": -1504.69,
+        "operations": [
+          {
+            "type": 22,
+            "type_name": "SELL",
+            "amount": -947.73,
+            "category": "SELL",
+            "date": "2025-04-03 15:00:00",
+            "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-04-03",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 19,
+            "type_name": "COMMISSION",
+            "amount": -390.77,
+            "category": "COMMISSION",
+            "date": "2025-04-03 16:00:00",
+            "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 26,
+            "type_name": "INCOME",
+            "amount": 659.53,
+            "category": "INCOME",
+            "date": "2025-04-03 12:00:00",
+            "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 27,
+            "type_name": "EXPENSE",
+            "amount": -1216.49,
+            "category": "EXPENSE",
+            "date": "2025-04-03 18:00:00",
+            "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          }
+        ]
+      },
+      "2025-04-04": {
+        "date": "2025-04-04",
+        "day_clearing": 6067.16,
+        "evening_clearing": 902.59,
+        "commission": 114.66,
+        "trades_count": 1,
+        "total_profit": 13824.84,
+        "operations": [
+          {
+            "type": 22,
+            "type_name": "SELL",
+            "amount": 6855.09,
+            "category": "SELL",
+            "date": "2025-04-04 15:00:00",
+            "description": "\u041e\u0431\u0449\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 2025-04-04",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 19,
+            "type_name": "COMMISSION",
+            "amount": -114.66,
+            "category": "COMMISSION",
+            "date": "2025-04-04 16:00:00",
+            "description": "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0431\u0440\u043e\u043a\u0435\u0440\u0430",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 26,
+            "type_name": "INCOME",
+            "amount": 6067.16,
+            "category": "INCOME",
+            "date": "2025-04-04 12:00:00",
+            "description": "\u0414\u043d\u0435\u0432\u043d\u0430\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          },
+          {
+            "type": 26,
+            "type_name": "INCOME",
+            "amount": 902.59,
+            "category": "INCOME",
+            "date": "2025-04-04 18:00:00",
+            "description": "\u0412\u0435\u0447\u0435\u0440\u043d\u044f\u044f \u043a\u043b\u0438\u0440\u0438\u043d\u0433\u043e\u0432\u0430\u044f",
+            "figi": "BBG0013HGFT4",
+            "instrument_name": ""
+          }
+        ]
+      }
+    }
+  }
+}

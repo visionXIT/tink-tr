@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Доходность</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background-color: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      h1 {
+        color: #333;
+        text-align: center;
+        margin-bottom: 30px;
+      }
+
+      .controls {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .control-group {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      label {
+        font-weight: bold;
+        color: #555;
+      }
+
+      select,
+      input {
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+
+      button {
+        padding: 10px 20px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      button:hover {
+        background-color: #0056b3;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 20px;
+        color: #666;
+      }
+
+      .error {
+        color: #d63384;
+        background-color: #f8d7da;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+      }
+
+      .summary-card {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+        border: 1px solid #e9ecef;
+      }
+
+      .summary-card h3 {
+        margin: 0 0 10px 0;
+        color: #495057;
+        font-size: 14px;
+      }
+
+      .summary-value {
+        font-size: 18px;
+        font-weight: bold;
+        color: #212529;
+      }
+
+      .positive {
+        color: #28a745;
+      }
+
+      .negative {
+        color: #dc3545;
+      }
+
+      .table-container {
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+      }
+
+      th,
+      td {
+        padding: 10px;
+        text-align: right;
+        border-bottom: 1px solid #ddd;
+      }
+
+      th:first-child,
+      td:first-child {
+        text-align: left;
+      }
+
+      th {
+        background-color: #f8f9fa;
+        font-weight: bold;
+        color: #495057;
+      }
+
+      tr:hover {
+        background-color: #f8f9fa;
+      }
+
+      .back-link {
+        display: inline-block;
+        margin-bottom: 20px;
+        color: #007bff;
+        text-decoration: none;
+      }
+
+      .back-link:hover {
+        text-decoration: underline;
+      }
+
+      .auth-form {
+        max-width: 400px;
+        margin: 100px auto;
+        padding: 30px;
+        background-color: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      .auth-form h2 {
+        text-align: center;
+        margin-bottom: 20px;
+        color: #333;
+      }
+
+      .auth-form input {
+        width: 100%;
+        margin-bottom: 15px;
+      }
+
+      .auth-form button {
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    {% if not auth %}
+    <div class="auth-form">
+      <h2>Авторизация</h2>
+      <form action="/pass" method="post">
+        <input type="password" name="s" placeholder="Пароль" required />
+        <button type="submit">Войти</button>
+      </form>
+    </div>
+    {% else %}
+    <div class="container">
+      <a href="/" class="back-link">← Назад к главной</a>
+
+      <h1>Доходность торговли</h1>
+
+      <div class="controls">
+        <div class="control-group">
+          <label for="period">Период:</label>
+          <select id="period">
+            <option value="week">По неделям</option>
+            <option value="month">По месяцам</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label for="weeksBack">Количество периодов:</label>
+          <input type="number" id="weeksBack" value="4" min="1" max="52" />
+        </div>
+
+        <div class="control-group">
+          <label for="dateMode">Режим выбора:</label>
+          <select id="dateMode" onchange="toggleDateMode()">
+            <option value="relative">Относительно текущей даты</option>
+            <option value="absolute">Конкретные даты</option>
+          </select>
+        </div>
+
+        <div class="control-group" id="dateRangeGroup" style="display: none">
+          <label for="startDate">Начальная дата:</label>
+          <input type="date" id="startDate" />
+          <label for="endDate">Конечная дата:</label>
+          <input type="date" id="endDate" />
+        </div>
+
+        <button onclick="loadData()" id="loadButton">Загрузить данные</button>
+      </div>
+
+      <div id="loading" class="loading" style="display: none">
+        Загрузка данных...
+      </div>
+
+      <div id="error" class="error" style="display: none"></div>
+
+      <div id="summary" class="summary" style="display: none"></div>
+
+      <div class="table-container">
+        <table id="dataTable" style="display: none">
+          <thead>
+            <tr>
+              <th>Период</th>
+              <th>Дневная клира</th>
+              <th>Вечерняя клира</th>
+              <th>Кол-во сделок</th>
+              <th>Комиссия</th>
+              <th>Чистая прибыль</th>
+              <th>%</th>
+              <th>Баланс начало</th>
+              <th>Баланс конец</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <script>
+      let currentData = [];
+
+      function toggleDateMode() {
+        const dateMode = document.getElementById("dateMode").value;
+        const dateRangeGroup = document.getElementById("dateRangeGroup");
+        const weeksBackGroup =
+          document.getElementById("weeksBack").parentElement;
+
+        if (dateMode === "absolute") {
+          dateRangeGroup.style.display = "block";
+          weeksBackGroup.style.display = "none";
+
+          // Устанавливаем значения по умолчанию (апрель 2025)
+          document.getElementById("startDate").value = "2025-03-31";
+          document.getElementById("endDate").value = "2025-04-30";
+        } else {
+          dateRangeGroup.style.display = "none";
+          weeksBackGroup.style.display = "block";
+        }
+      }
+
+      async function loadData() {
+        const period = document.getElementById("period").value;
+        const dateMode = document.getElementById("dateMode").value;
+        const loadButton = document.getElementById("loadButton");
+        const loading = document.getElementById("loading");
+        const error = document.getElementById("error");
+        const summary = document.getElementById("summary");
+        const table = document.getElementById("dataTable");
+
+        // Показываем загрузку
+        loading.style.display = "block";
+        error.style.display = "none";
+        summary.style.display = "none";
+        table.style.display = "none";
+        loadButton.disabled = true;
+
+        try {
+          let url;
+          if (dateMode === "absolute") {
+            const startDate = document.getElementById("startDate").value;
+            const endDate = document.getElementById("endDate").value;
+
+            if (!startDate || !endDate) {
+              throw new Error("Пожалуйста, укажите начальную и конечную даты");
+            }
+
+            url = `/api/performance-data?period=${period}&start_date=${startDate}&end_date=${endDate}`;
+          } else {
+            const weeksBack = document.getElementById("weeksBack").value;
+            url = `/api/performance-data?period=${period}&weeks_back=${weeksBack}`;
+          }
+
+          const response = await fetch(url);
+          const data = await response.json();
+
+          if (data.error) {
+            throw new Error(data.error);
+          }
+
+          currentData = data.data;
+          renderSummary(data.data);
+          renderTable(data.data);
+
+          summary.style.display = "grid";
+          table.style.display = "block";
+        } catch (err) {
+          error.textContent = "Ошибка загрузки данных: " + err.message;
+          error.style.display = "block";
+        } finally {
+          loading.style.display = "none";
+          loadButton.disabled = false;
+        }
+      }
+
+      function renderSummary(data) {
+        const summary = document.getElementById("summary");
+
+        const totalProfit = data.reduce(
+          (sum, item) => sum + item.net_profit,
+          0
+        );
+        const totalTrades = data.reduce(
+          (sum, item) => sum + item.trades_count,
+          0
+        );
+        const totalCommission = data.reduce(
+          (sum, item) => sum + item.commission,
+          0
+        );
+        const avgProfitPerPeriod =
+          data.length > 0 ? totalProfit / data.length : 0;
+        const profitablePeriods = data.filter(
+          (item) => item.net_profit > 0
+        ).length;
+
+        summary.innerHTML = `
+                <div class="summary-card">
+                    <h3>Общая прибыль</h3>
+                    <div class="summary-value ${
+                      totalProfit >= 0 ? "positive" : "negative"
+                    }">
+                        ${formatCurrency(totalProfit)}
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <h3>Всего сделок</h3>
+                    <div class="summary-value">${totalTrades}</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Всего комиссий</h3>
+                    <div class="summary-value">${formatCurrency(
+                      totalCommission
+                    )}</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Средняя прибыль за период</h3>
+                    <div class="summary-value ${
+                      avgProfitPerPeriod >= 0 ? "positive" : "negative"
+                    }">
+                        ${formatCurrency(avgProfitPerPeriod)}
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <h3>Прибыльных периодов</h3>
+                    <div class="summary-value">${profitablePeriods} из ${
+          data.length
+        }</div>
+                </div>
+            `;
+      }
+
+      function renderTable(data) {
+        const tbody = document.getElementById("tableBody");
+        tbody.innerHTML = "";
+
+        data.forEach((item) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+                    <td>${item.start_date} - ${item.end_date}</td>
+                    <td class="${
+                      item.day_clearing >= 0 ? "positive" : "negative"
+                    }">
+                        ${formatCurrency(item.day_clearing)}
+                    </td>
+                    <td class="${
+                      item.evening_clearing >= 0 ? "positive" : "negative"
+                    }">
+                        ${formatCurrency(item.evening_clearing)}
+                    </td>
+                    <td>${item.trades_count}</td>
+                    <td>${formatCurrency(item.commission)}</td>
+                    <td class="${
+                      item.net_profit >= 0 ? "positive" : "negative"
+                    }">
+                        ${formatCurrency(item.net_profit)}
+                    </td>
+                    <td class="${
+                      item.profit_percentage >= 0 ? "positive" : "negative"
+                    }">
+                        ${item.profit_percentage.toFixed(2)}%
+                    </td>
+                    <td>${formatCurrency(item.balance_start)}</td>
+                    <td>${formatCurrency(item.balance_end)}</td>
+                    
+                `;
+          tbody.appendChild(row);
+        });
+      }
+
+      function formatCurrency(amount) {
+        return new Intl.NumberFormat("ru-RU", {
+          style: "currency",
+          currency: "RUB",
+          minimumFractionDigits: 2,
+        }).format(amount);
+      }
+
+      // Загружаем данные при загрузке страницы
+      window.addEventListener("load", function () {
+        loadData();
+      });
+    </script>
+  </body>
+</html>
