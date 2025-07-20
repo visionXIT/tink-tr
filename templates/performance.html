@@ -250,9 +250,6 @@
               <th>Кол-во сделок</th>
               <th>Комиссия</th>
               <th>Чистая прибыль</th>
-              <th>%</th>
-              <th>Баланс начало</th>
-              <th>Баланс конец</th>
             </tr>
           </thead>
           <tbody id="tableBody"></tbody>
@@ -419,14 +416,7 @@
                     }">
                         ${formatCurrency(item.net_profit)}
                     </td>
-                    <td class="${
-                      item.profit_percentage >= 0 ? "positive" : "negative"
-                    }">
-                        ${item.profit_percentage.toFixed(2)}%
-                    </td>
-                    <td>${formatCurrency(item.balance_start)}</td>
-                    <td>${formatCurrency(item.balance_end)}</td>
-                    
+
                 `;
           tbody.appendChild(row);
         });
