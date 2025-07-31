@@ -70,6 +70,7 @@ async def check_stop_loss():
 async def remove_log_file():
     os.remove("log.txt")
 
+schedule.start()
 
 logging.basicConfig(
     level=settings.log_level,
