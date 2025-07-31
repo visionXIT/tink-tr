@@ -6,6 +6,7 @@ import copy
 import datetime
 import logging
 import random
+import pytz
 from typing import Annotated, Any, Literal
 from uuid import uuid4
 
@@ -494,10 +495,47 @@ async def main(request: Request):
     if ii == None:
         await prepare_data()
 
-    start_time = datetime.datetime.now() - datetime.timedelta(days=num_trades)
-    start_time = start_time.replace(hour=0, minute=0)
+    # Получаем данные за текущую неделю для отображения "Бот заработал" (как в API)
+    moscow_tz = pytz.timezone('Europe/Moscow')
+    now = datetime.datetime.now(moscow_tz)
+
+    # Calculate current week start (Monday)
+    days_since_monday = now.weekday()
+    week_start_time = now - datetime.timedelta(days=days_since_monday)
+    week_start_time = week_start_time.replace(
+        hour=0, minute=0, second=0, microsecond=0)
 
     port = await client.get_portfolio(account_id=settings.account_id)
+
+    # Получаем операции за последнюю неделю для расчета прибыли
+    week_orders = await client.get_operations(account_id=settings.account_id,
+                                              from_=week_start_time,
+                                              to=datetime.datetime.now())
+
+    # Используем ту же логику, что и API для расчета прибыли за неделю
+    if week_orders and week_orders.operations:
+        week_result = await _group_operations_by_period(
+            week_orders.operations,
+            "week",
+            week_start_time,
+            now,
+            client
+        )
+
+        if week_result:
+            # Берем самый последний период (текущую неделю)
+            week_profit = week_result[0]['net_profit']
+        else:
+            week_profit = 0.0
+    else:
+        week_profit = 0.0
+
+    # Для отображения сделок используем старый метод
+    week_trades, _, week_p = calc_trades(copy.copy(week_orders.operations))
+
+    # Получаем операции за num_trades дней для отображения сделок
+    start_time = datetime.datetime.now() - datetime.timedelta(days=num_trades)
+    start_time = start_time.replace(hour=0, minute=0)
     orders = await client.get_operations(account_id=settings.account_id,
                                          from_=start_time,
                                          to=datetime.datetime.now())
@@ -551,7 +589,7 @@ async def main(request: Request):
         },
         "inverted": inverted,
         "trades": trades,
-        "result": inc,
+        "result": week_profit,  # Используем прибыль за последнюю неделю
         "q2f": quotation_to_float,
         "q_limit": q_limit,
         "figi": figi,
