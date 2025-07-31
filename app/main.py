@@ -69,10 +69,6 @@ async def check_stop_loss():
 async def remove_log_file():
     os.remove("log.txt")
 
-# Only start the scheduler if not in testing mode
-if __name__ == "__main__" and not os.getenv('TESTING'):
-    schedule.start()
-
 
 logging.basicConfig(
     level=settings.log_level,
