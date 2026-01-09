@@ -79,13 +79,13 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # убиваем все screen, так как на сервере они используются только для запуска бота. Вначале останавливаем все предыдущие сессии
-pkill screen 2>/dev/null || true
-killall screen
+killall screen || true
 sleep 1
-
+echo "Запускаем бота..."
 cd ~/tink-tr
 source venv/bin/activate
 screen -dmS tink-tr bash -c "cd ~/tink-tr && source venv/bin/activate && make start"
+echo "Бот запущен..."
 sleep 2
 
 echo ""
