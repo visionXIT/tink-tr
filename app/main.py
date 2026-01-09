@@ -1,41 +1,36 @@
-import logging.handlers
-import os
-import sqlite3
 import asyncio
 import copy
 import datetime
 import logging
+import logging.handlers
+import os
 import random
-import pytz
+import sqlite3
 from typing import Annotated, Any, Literal
 from uuid import uuid4
 
+import pytz
+import starlette
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import Body, FastAPI, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-import starlette
-from tinkoff.invest.grpc.instruments_pb2 import INSTRUMENT_ID_TYPE_FIGI
-from tinkoff.invest.grpc.orders_pb2 import (
-    ORDER_DIRECTION_SELL,
+from t_tech.invest import InstrumentType
+from t_tech.invest.grpc.instruments_pb2 import INSTRUMENT_ID_TYPE_FIGI
+from t_tech.invest.grpc.operations_pb2 import OperationType
+from t_tech.invest.grpc.orders_pb2 import (
     ORDER_DIRECTION_BUY,
+    ORDER_DIRECTION_SELL,
     ORDER_TYPE_MARKET,
 )
-from tinkoff.invest.grpc.operations_pb2 import OperationType
-
-from tinkoff.invest import InstrumentType
 
 # from instruments_config.parser import instruments_config
 from app.client import client
 from app.settings import settings
 from app.utils.portfolio import get_position
-from app.utils.quotation import quotation_to_float
 from app.utils.profit_calculator import ProfitCalculator
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
-
-from app.settings import settings
+from app.utils.quotation import quotation_to_float
 
 schedule = AsyncIOScheduler()
 
@@ -45,7 +40,7 @@ def correct_timezone(date: datetime.datetime) -> datetime.datetime:
     return date + datetime.timedelta(hours=3)
 
 
-@schedule.scheduled_job('interval', seconds=10)
+@schedule.scheduled_job("interval", seconds=10)
 async def check_stop_loss():
     global last_order_price, last_order
 
@@ -56,32 +51,45 @@ async def check_stop_loss():
     if last_order_price and last_order:
         current_price = await client.get_last_price(figi)
         logger.debug(
-            f"CURRENT PRICE {current_price}, LAST ORDER PRICE {last_order_price}, STOP LOSS DIFF {stop_loss_diff}")
-        if last_order.direction == ORDER_DIRECTION_BUY and last_order_price - current_price > stop_loss_diff:
-            await handle_operation("SELL" if not stop_loss_closes_position else "CLOSE", "STOP LOSS FROM BUY")
+            f"CURRENT PRICE {current_price}, LAST ORDER PRICE {last_order_price}, STOP LOSS DIFF {stop_loss_diff}"
+        )
+        if (
+            last_order.direction == ORDER_DIRECTION_BUY
+            and last_order_price - current_price > stop_loss_diff
+        ):
+            await handle_operation(
+                "SELL" if not stop_loss_closes_position else "CLOSE",
+                "STOP LOSS FROM BUY",
+            )
             logger.info(f"STOP LOSS {datetime.datetime.now()}")
-        elif last_order.direction == ORDER_DIRECTION_SELL and current_price - last_order_price > stop_loss_diff:
-            await handle_operation("BUY" if not stop_loss_closes_position else "CLOSE", "STOP LOSS FROM SELL")
+        elif (
+            last_order.direction == ORDER_DIRECTION_SELL
+            and current_price - last_order_price > stop_loss_diff
+        ):
+            await handle_operation(
+                "BUY" if not stop_loss_closes_position else "CLOSE",
+                "STOP LOSS FROM SELL",
+            )
             logger.info(f"STOP LOSS {datetime.datetime.now()}")
     logger.debug("CHECK STOP LOSS END")
 
 
-@schedule.scheduled_job('interval', hours=24)
+@schedule.scheduled_job("interval", hours=24)
 async def remove_log_file():
     os.remove("log.txt")
+
 
 schedule.start()
 
 logging.basicConfig(
-    level=settings.log_level,
+    level=logging.DEBUG,
     format="[%(levelname)-5s] %(asctime)-19s %(name)s:%(lineno)d: %(message)s",
     handlers=[
-        logging.handlers.RotatingFileHandler(
-            "log.txt", maxBytes=5 * 1024),
-        logging.StreamHandler()
-    ]
+        logging.handlers.RotatingFileHandler("log.txt", maxBytes=5 * 1024),
+        logging.StreamHandler(),
+    ],
 )
-logging.getLogger("tinkoff").setLevel(settings.tinkoff_library_log_level)
+logging.getLogger("t_tech").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 con = sqlite3.connect("trading.db")
@@ -104,7 +112,7 @@ ii = None
 q_limit = settings_bot[1]
 auth = None
 
-templates = Jinja2Templates(directory='templates')
+templates = Jinja2Templates(directory="templates")
 num_trades = 10
 add_ticker = None
 found_tickers = None
@@ -127,10 +135,16 @@ unsuccessful_trade = None
 error = None
 
 work_on_time = True if settings_bot[3] == 1 else False
-time_start = datetime.time.fromisoformat(
-    settings_bot[4]) if settings_bot[4] and settings_bot[4] != "None" else None
-time_end = datetime.time.fromisoformat(
-    settings_bot[5]) if settings_bot[5] and settings_bot[5] != "None" else None
+time_start = (
+    datetime.time.fromisoformat(settings_bot[4])
+    if settings_bot[4] and settings_bot[4] != "None"
+    else None
+)
+time_end = (
+    datetime.time.fromisoformat(settings_bot[5])
+    if settings_bot[5] and settings_bot[5] != "None"
+    else None
+)
 
 task_for_closing_position = None
 
@@ -148,8 +162,14 @@ async def wait_for_close():
     if work_on_time and time_end != None and now < time_end:
         t = None
         try:
-            t = time_end.hour * 3600 + time_end.minute * 60 + \
-                time_end.second - now.hour * 3600 - now.minute * 60 - now.second
+            t = (
+                time_end.hour * 3600
+                + time_end.minute * 60
+                + time_end.second
+                - now.hour * 3600
+                - now.minute * 60
+                - now.second
+            )
         except Exception as e:
             logger.error(f"Error {e}")
             await asyncio.sleep(10)
@@ -164,14 +184,18 @@ async def wait_for_close():
             res = await handle_operation("CLOSE")
             logger.error(res)
             if res == 0:
-                unsuccessful_trade = 'CLOSE'
-                logger.error(" Unsucceful trade " +
-                             str(unsuccessful_trade))
+                unsuccessful_trade = "CLOSE"
+                logger.error(" Unsucceful trade " + str(unsuccessful_trade))
                 await wait_for_trade(0)
 
     elif work_on_time and time_end != None and now > time_end:
         logger.debug("WAITING 2")
-        await asyncio.sleep((24 - now.hour) * 3600 + (60 - now.minute) * 60 + (60 - now.second) + 10 * 3600)
+        await asyncio.sleep(
+            (24 - now.hour) * 3600
+            + (60 - now.minute) * 60
+            + (60 - now.second)
+            + 10 * 3600
+        )
         await wait_for_close()
         return
 
@@ -179,14 +203,24 @@ async def wait_for_close():
     await asyncio.sleep(60)
     await wait_for_close()
 
+
 if time_end:
     task_for_closing_position = asyncio.create_task(wait_for_close())
 
 
 def save_settings():
     cur = con.cursor()
-    cur.execute("UPDATE settings SET lot=?, inverted=?, work_on_time=?, start_work=?, end_work=?, set_q=? WHERE id = 1",
-                (q_limit, 1 if inverted else 0, 1 if work_on_time else 0, str(time_start), str(time_end), figi_name))
+    cur.execute(
+        "UPDATE settings SET lot=?, inverted=?, work_on_time=?, start_work=?, end_work=?, set_q=? WHERE id = 1",
+        (
+            q_limit,
+            1 if inverted else 0,
+            1 if work_on_time else 0,
+            str(time_start),
+            str(time_end),
+            figi_name,
+        ),
+    )
     con.commit()
     cur.close()
 
@@ -248,24 +282,27 @@ async def handle_sell(id="0"):
     logger.debug("HANDLE SELL START")
     position_quantity = await get_position_quantity()
 
-    if (piramid and position_quantity > -maxAmount) or (not piramid and position_quantity > -q_limit):
-
+    if (piramid and position_quantity > -maxAmount) or (
+        not piramid and position_quantity > -q_limit
+    ):
         try:
             if piramid:
-                quantity = q_limit if position_quantity - q_limit > - \
-                    maxAmount else (maxAmount + position_quantity)
+                quantity = (
+                    q_limit
+                    if position_quantity - q_limit > -maxAmount
+                    else (maxAmount + position_quantity)
+                )
 
                 if position_quantity > 0:
-                    quantity = position_quantity + \
-                        (q_limit if q_limit < maxAmount else maxAmount)
+                    quantity = position_quantity + (
+                        q_limit if q_limit < maxAmount else maxAmount
+                    )
 
                 quantity /= ii.lot
             else:
                 quantity = (q_limit + position_quantity) / ii.lot
 
-            logger.info(
-                id + f" Selling {quantity} shares. figi={figi}"
-            )
+            logger.info(id + f" Selling {quantity} shares. figi={figi}")
 
             posted_order = await client.post_order(
                 order_id=str(uuid4()),
@@ -278,12 +315,18 @@ async def handle_sell(id="0"):
 
             last_order = posted_order
 
-            logger.info(id + " " + str(posted_order.lots_requested) + " " +
-                        str(posted_order.figi) + " " + str(posted_order.direction))
+            logger.info(
+                id
+                + " "
+                + str(posted_order.lots_requested)
+                + " "
+                + str(posted_order.figi)
+                + " "
+                + str(posted_order.direction)
+            )
         except Exception as e:
             error = str(e)
-            logger.error(
-                id + f" Failed to post sell order. figi={figi}. {e}")
+            logger.error(id + f" Failed to post sell order. figi={figi}. {e}")
             return 0
         ###
     else:
@@ -296,24 +339,27 @@ async def handle_buy(id="0"):
     logger.debug("HANDLE BUY START")
     position_quantity = await get_position_quantity()
 
-    if (not piramid and position_quantity < q_limit) or (piramid and position_quantity < maxAmount):
-
+    if (not piramid and position_quantity < q_limit) or (
+        piramid and position_quantity < maxAmount
+    ):
         try:
             if piramid:
-                quantity = q_limit if position_quantity + \
-                    q_limit < maxAmount else (maxAmount - position_quantity)
+                quantity = (
+                    q_limit
+                    if position_quantity + q_limit < maxAmount
+                    else (maxAmount - position_quantity)
+                )
 
                 if position_quantity < 0:
-                    quantity = -position_quantity + \
-                        (q_limit if q_limit < maxAmount else maxAmount)
+                    quantity = -position_quantity + (
+                        q_limit if q_limit < maxAmount else maxAmount
+                    )
 
             else:
                 quantity = q_limit - position_quantity
             quantity /= ii.lot
 
-            logger.info(
-                id + f" Buying {quantity} shares. figi={figi}"
-            )
+            logger.info(id + f" Buying {quantity} shares. figi={figi}")
 
             posted_order = await client.post_order(
                 order_id=str(uuid4()),
@@ -324,14 +370,20 @@ async def handle_buy(id="0"):
                 account_id=settings.account_id,
             )
 
-            logger.info(id + " " + str(posted_order.lots_requested) + " " +
-                        str(posted_order.figi) + " " + str(posted_order.direction))
+            logger.info(
+                id
+                + " "
+                + str(posted_order.lots_requested)
+                + " "
+                + str(posted_order.figi)
+                + " "
+                + str(posted_order.direction)
+            )
 
             last_order = posted_order
         except Exception as e:
             error = e
-            logger.error(
-                id + f" Failed to post buy order. figi={figi}. {e}")
+            logger.error(id + f" Failed to post buy order. figi={figi}. {e}")
             return 0
         ###
     else:
@@ -345,16 +397,16 @@ async def handle_close(id="0"):
     position_quantity = await get_position_quantity()
     if position_quantity != 0:
         quantity_to_buy = abs(position_quantity)
-        logger.info(
-            id + f" Closing {quantity_to_buy} shares. figi={figi}"
-        )
+        logger.info(id + f" Closing {quantity_to_buy} shares. figi={figi}")
         try:
             quantity = quantity_to_buy / ii.lot
 
             posted_order = await client.post_order(
                 order_id=str(uuid4()),
                 figi=figi,
-                direction=ORDER_DIRECTION_BUY if position_quantity < 0 else ORDER_DIRECTION_SELL,
+                direction=ORDER_DIRECTION_BUY
+                if position_quantity < 0
+                else ORDER_DIRECTION_SELL,
                 quantity=int(quantity),
                 order_type=ORDER_TYPE_MARKET,
                 account_id=settings.account_id,
@@ -363,12 +415,18 @@ async def handle_close(id="0"):
             last_order_price = None
             last_order = None
 
-            logger.info(id + " " + str(posted_order.lots_requested) + " " +
-                        str(posted_order.figi) + " " + str(posted_order.direction))
+            logger.info(
+                id
+                + " "
+                + str(posted_order.lots_requested)
+                + " "
+                + str(posted_order.figi)
+                + " "
+                + str(posted_order.direction)
+            )
         except Exception as e:
             error = e
-            logger.error(
-                id + f" Failed to post close order. figi={figi}. {e}")
+            logger.error(id + f" Failed to post close order. figi={figi}. {e}")
             return 0
         ###
     else:
@@ -409,26 +467,51 @@ async def get_alert(request: Request, alert: Any = Body(None)):
                 return
 
     res = None
-    logger.info(str(id) + " " + str(work_on_time) + " " +
-                str(time_start) + " " + str(time_end))
-    if bot_working and \
-            ((work_on_time and time_start and time_end and (
-                (time_start < time_end and time_start <= correct_timezone(
-                    datetime.datetime.now()).time() <= time_end)
-                or (time_start > time_end and (time_start <= correct_timezone(datetime.datetime.now()).time() or correct_timezone(datetime.datetime.now()).time() <= time_end))
-            )) or not work_on_time or not time_start or not time_end):
-
-        if (signal == 'BUY' and not inverted) or (signal == "SELL" and inverted):
+    logger.info(
+        str(id) + " " + str(work_on_time) + " " + str(time_start) + " " + str(time_end)
+    )
+    if bot_working and (
+        (
+            work_on_time
+            and time_start
+            and time_end
+            and (
+                (
+                    time_start < time_end
+                    and time_start
+                    <= correct_timezone(datetime.datetime.now()).time()
+                    <= time_end
+                )
+                or (
+                    time_start > time_end
+                    and (
+                        time_start <= correct_timezone(datetime.datetime.now()).time()
+                        or correct_timezone(datetime.datetime.now()).time() <= time_end
+                    )
+                )
+            )
+        )
+        or not work_on_time
+        or not time_start
+        or not time_end
+    ):
+        if signal == "EXIT":
+            res = await handle_operation("CLOSE", id)
+            logger.info(str(id) + " EXIT")
+        elif (signal == "BUY" and not inverted) or (signal == "SELL" and inverted):
             res = await handle_operation("BUY", id)
             logger.info(str(id) + " BUY")
-        elif (signal == 'SELL' and not inverted) or (signal == "BUY" and inverted):
+        elif (signal == "SELL" and not inverted) or (signal == "BUY" and inverted):
             res = await handle_operation("SELL", id)
             logger.info(str(id) + " SELL")
         else:
             logger.error(str(id) + " UNKNOWN SIGNAL " + signal)
     if res == 0:
-        unsuccessful_trade = "BUY" if (signal == "BUY" and not inverted) or (
-            signal == "SELL" and inverted) else "SELL"
+        unsuccessful_trade = (
+            "BUY"
+            if (signal == "BUY" and not inverted) or (signal == "SELL" and inverted)
+            else "SELL"
+        )
         logger.error(id + " Unsucceful trade " + str(unsuccessful_trade))
 
         asyncio.create_task(wait_for_trade(id))
@@ -446,13 +529,13 @@ async def wait_for_trade(id="0"):
 
             await asyncio.sleep(a)
 
-        elif (now.hour == 18 and now.minute >= 50):
+        elif now.hour == 18 and now.minute >= 50:
             a = max(15 * 60 - (now.minute - 50) * 60 - now.second + 1, 0)
             logger.error(id + " For " + str(a))
 
             await asyncio.sleep(a)
 
-        elif (now.hour == 19 and now.minute <= 5):
+        elif now.hour == 19 and now.minute <= 5:
             a = max(5 * 60 - now.minute * 60 - now.second + 1, 0)
             logger.error(id + " For " + str(a))
 
@@ -463,15 +546,15 @@ async def wait_for_trade(id="0"):
 
         logger.error(id + " Waiting " + str(unsuccessful_trade))
 
-        if unsuccessful_trade == 'BUY':
+        if unsuccessful_trade == "BUY":
             res = await handle_operation("BUY", id)
             if res == None:
                 unsuccessful_trade = None
-        elif unsuccessful_trade == 'SELL':
+        elif unsuccessful_trade == "SELL":
             res = await handle_operation("SELL", id)
             if res == None:
                 unsuccessful_trade = None
-        elif unsuccessful_trade == 'CLOSE':
+        elif unsuccessful_trade == "CLOSE":
             res = await handle_operation("CLOSE", id)
             if res == None:
                 unsuccessful_trade = None
@@ -497,35 +580,32 @@ async def main(request: Request):
         await prepare_data()
 
     # Получаем данные за текущую неделю для отображения "Бот заработал" (как в API)
-    moscow_tz = pytz.timezone('Europe/Moscow')
+    moscow_tz = pytz.timezone("Europe/Moscow")
     now = datetime.datetime.now(moscow_tz)
 
     # Calculate current week start (Monday)
     days_since_monday = now.weekday()
     week_start_time = now - datetime.timedelta(days=days_since_monday)
-    week_start_time = week_start_time.replace(
-        hour=0, minute=0, second=0, microsecond=0)
+    week_start_time = week_start_time.replace(hour=0, minute=0, second=0, microsecond=0)
 
     port = await client.get_portfolio(account_id=settings.account_id)
 
     # Получаем операции за последнюю неделю для расчета прибыли
-    week_orders = await client.get_operations(account_id=settings.account_id,
-                                              from_=week_start_time,
-                                              to=datetime.datetime.now())
+    week_orders = await client.get_operations(
+        account_id=settings.account_id,
+        from_=week_start_time,
+        to=datetime.datetime.now(),
+    )
 
     # Используем ту же логику, что и API для расчета прибыли за неделю
     if week_orders and week_orders.operations:
         week_result = await _group_operations_by_period(
-            week_orders.operations,
-            "week",
-            week_start_time,
-            now,
-            client
+            week_orders.operations, "week", week_start_time, now, client
         )
 
         if week_result:
             # Берем самый последний период (текущую неделю)
-            week_profit = week_result[0]['net_profit']
+            week_profit = week_result[0]["net_profit"]
         else:
             week_profit = 0.0
     else:
@@ -537,9 +617,9 @@ async def main(request: Request):
     # Получаем операции за num_trades дней для отображения сделок
     start_time = datetime.datetime.now() - datetime.timedelta(days=num_trades)
     start_time = start_time.replace(hour=0, minute=0)
-    orders = await client.get_operations(account_id=settings.account_id,
-                                         from_=start_time,
-                                         to=datetime.datetime.now())
+    orders = await client.get_operations(
+        account_id=settings.account_id, from_=start_time, to=datetime.datetime.now()
+    )
     trades, inc, p = calc_trades(copy.copy(orders.operations))
     trades.reverse()
 
@@ -554,17 +634,33 @@ async def main(request: Request):
         nonlocal opers, orders
         f = p if f == 1 else orders.operations
         for i in range(j - 1, -1, -1):
-            if f[i].operation_type in [OperationType.OPERATION_TYPE_BUY, OperationType.OPERATION_TYPE_SELL]:
+            if f[i].operation_type in [
+                OperationType.OPERATION_TYPE_BUY,
+                OperationType.OPERATION_TYPE_SELL,
+            ]:
                 return f[i]
 
     opers = []
 
     for i in range(len(orders.operations)):
         oper = orders.operations[i]
-        if oper.operation_type == OperationType.OPERATION_TYPE_BUY or oper.operation_type == OperationType.OPERATION_TYPE_SELL:
-            if oper.quantity == q_limit or oper.quantity == q_limit * 2 or (get_last_q(i, 2) and get_last_q(i, 2).quantity / 2 + q_limit == oper.quantity):
+        if (
+            oper.operation_type == OperationType.OPERATION_TYPE_BUY
+            or oper.operation_type == OperationType.OPERATION_TYPE_SELL
+        ):
+            if (
+                oper.quantity == q_limit
+                or oper.quantity == q_limit * 2
+                or (
+                    get_last_q(i, 2)
+                    and get_last_q(i, 2).quantity / 2 + q_limit == oper.quantity
+                )
+            ):
                 opers.append(oper)
-        elif oper.operation_type == OperationType.OPERATION_TYPE_WRITING_OFF_VARMARGIN or oper.operation_type == OperationType.OPERATION_TYPE_ACCRUING_VARMARGIN:
+        elif (
+            oper.operation_type == OperationType.OPERATION_TYPE_WRITING_OFF_VARMARGIN
+            or oper.operation_type == OperationType.OPERATION_TYPE_ACCRUING_VARMARGIN
+        ):
             opers.append(oper)
 
         elif oper.operation_type == OperationType.OPERATION_TYPE_BROKER_FEE:
@@ -579,15 +675,8 @@ async def main(request: Request):
         "bot_working": bool(bot_working),
         "portfolio": port,
         "orders": orders,
-        "settings": {
-            "show_fees": True,
-            "num_trades": num_trades
-        },
-        "f": {
-            "correct_timezone": correct_timezone,
-            "round": round2,
-            "len": len
-        },
+        "settings": {"show_fees": True, "num_trades": num_trades},
+        "f": {"correct_timezone": correct_timezone, "round": round2, "len": len},
         "inverted": inverted,
         "trades": trades,
         "result": week_profit,  # Используем прибыль за последнюю неделю
@@ -611,7 +700,7 @@ async def main(request: Request):
         "piramid": piramid,
         "stop_loss": stop_loss,
         "stop_loss_diff": stop_loss_diff,
-        "stop_loss_closes_position": stop_loss_closes_position
+        "stop_loss_closes_position": stop_loss_closes_position,
     }
 
     if not found_tickers or len(found_tickers) < 2:
@@ -629,25 +718,28 @@ def calc_trades(operations):
     """
     calculator = ProfitCalculator()
     # Use the enhanced method that automatically detects starting positions
-    trades, total_profit, processed_operations, starting_positions = calculator.process_operations_with_auto_positions(
-        operations)
+    trades, total_profit, processed_operations, starting_positions = (
+        calculator.process_operations_with_auto_positions(operations)
+    )
 
     # Convert to old format for compatibility
     res = []
     for i, trade in enumerate(trades):
-        res.append({
-            "num": i + 1,
-            "timeStart": trade.entry_time.strftime("%Y-%m-%d %H:%M"),
-            "timeEnd": trade.exit_time.strftime("%Y-%m-%d %H:%M"),
-            "type": trade.direction.title(),
-            "figi": trade.figi,
-            "quantity": trade.quantity,
-            "pt1": trade.entry_price,
-            "pt2": trade.exit_price,
-            "result": trade.net_profit,
-            "gross_profit": trade.gross_profit,
-            "fees": trade.fees
-        })
+        res.append(
+            {
+                "num": i + 1,
+                "timeStart": trade.entry_time.strftime("%Y-%m-%d %H:%M"),
+                "timeEnd": trade.exit_time.strftime("%Y-%m-%d %H:%M"),
+                "type": trade.direction.title(),
+                "figi": trade.figi,
+                "quantity": trade.quantity,
+                "pt1": trade.entry_price,
+                "pt2": trade.exit_price,
+                "result": trade.net_profit,
+                "gross_profit": trade.gross_profit,
+                "fees": trade.fees,
+            }
+        )
 
     return res, total_profit, processed_operations
 
@@ -662,7 +754,10 @@ async def change_work_on_time():
 
 
 @app.post("/change_time")
-async def change_time(ts: Annotated[datetime.time, Form()] = None, te: Annotated[datetime.time, Form()] = None):
+async def change_time(
+    ts: Annotated[datetime.time, Form()] = None,
+    te: Annotated[datetime.time, Form()] = None,
+):
     global time_start, time_end, task_for_closing_position
     time_start = ts
     time_end = te
@@ -749,7 +844,7 @@ async def change_maxam(maxam: Annotated[int, Form()]):
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
 
-@app.post('/change_inv')
+@app.post("/change_inv")
 async def ch():
     global inverted
     inverted = not inverted
@@ -765,7 +860,7 @@ async def change():
     return RedirectResponse("/", status_code=starlette.status.HTTP_302_FOUND)
 
 
-@app.post('/exit_add_k')
+@app.post("/exit_add_k")
 async def exit_add_k():
     global add_ticker, found_tickers, selected_type
     add_ticker = found_tickers = selected_type = None
@@ -785,7 +880,7 @@ async def change_k(ticker: Annotated[str, Form()], type: Annotated[str, Form()])
     selected_type = type
 
     i_type = None
-    if type == 'share':
+    if type == "share":
         i_type = InstrumentType.INSTRUMENT_TYPE_SHARE
     elif type == "futures":
         i_type = InstrumentType.INSTRUMENT_TYPE_FUTURES
@@ -793,7 +888,9 @@ async def change_k(ticker: Annotated[str, Form()], type: Annotated[str, Form()])
         i_type = InstrumentType.INSTRUMENT_TYPE_UNSPECIFIED
 
     add_ticker = ticker
-    res = await client.find_instrument(query=ticker, instrument_kind=i_type, api_trade_available_flag=True)
+    res = await client.find_instrument(
+        query=ticker, instrument_kind=i_type, api_trade_available_flag=True
+    )
 
     found_tickers = res.instruments
     if len(found_tickers) == 1 and KOT.get(found_tickers[0].ticker) == None:
@@ -803,7 +900,8 @@ async def change_k(ticker: Annotated[str, Form()], type: Annotated[str, Form()])
         selected_type = None
         cur = con.cursor()
         cur.execute(
-            f"INSERT INTO quoutes(name, figi) VALUES('{found_tickers[0].ticker}', '{found_tickers[0].figi}')")
+            f"INSERT INTO quoutes(name, figi) VALUES('{found_tickers[0].ticker}', '{found_tickers[0].figi}')"
+        )
         con.commit()
         cur.close()
 
@@ -846,15 +944,14 @@ async def get_profit_analysis(days: int = 30, enhanced: bool = True):
 
     try:
         import datetime
-        moscow_tz = __import__('pytz').timezone('Europe/Moscow')
+
+        moscow_tz = __import__("pytz").timezone("Europe/Moscow")
         end_date = datetime.datetime.now(moscow_tz)
         start_date = end_date - datetime.timedelta(days=days)
 
         # Get operations for the period
         operations_response = await client.get_operations_for_period(
-            account_id=settings.account_id,
-            start_date=start_date,
-            end_date=end_date
+            account_id=settings.account_id, start_date=start_date, end_date=end_date
         )
 
         if not operations_response or not operations_response.operations:
@@ -867,24 +964,24 @@ async def get_profit_analysis(days: int = 30, enhanced: bool = True):
                     "total_trades": 0,
                     "total_day_clearing": 0.0,
                     "total_evening_clearing": 0.0,
-                    "total_earnings": 0.0
+                    "total_earnings": 0.0,
                 },
                 "balance_progression": {},
                 "table_format": {
                     "total_profit": 0.0,
                     "total_commission": 0.0,
                     "total_trades": 0,
-                    "daily_breakdown": {}
-                }
+                    "daily_breakdown": {},
+                },
             }
 
         # Use exact table calculator as default
         from app.utils.profit_calculator import TableExactCalculator
+
         calculator = TableExactCalculator()
 
         result = calculator.get_exact_table_analysis(
-            operations_response.operations,
-            starting_balance=0.0
+            operations_response.operations, starting_balance=0.0
         )
 
         return {
@@ -892,12 +989,12 @@ async def get_profit_analysis(days: int = 30, enhanced: bool = True):
             "period": {
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
-                "days": days
+                "days": days,
             },
-            "daily_data": result['daily_data'],
-            "summary": result['summary'],
-            "balance_progression": result['balance_progression'],
-            "table_format": result['table_format']
+            "daily_data": result["daily_data"],
+            "summary": result["summary"],
+            "balance_progression": result["balance_progression"],
+            "table_format": result["table_format"],
         }
 
     except Exception as e:
@@ -906,20 +1003,21 @@ async def get_profit_analysis(days: int = 30, enhanced: bool = True):
 
 
 @app.get("/api/period-profit")
-async def get_period_profit(start_date: str, end_date: str, starting_balance: float = 0.0):
+async def get_period_profit(
+    start_date: str, end_date: str, starting_balance: float = 0.0
+):
     """Get profit analysis for a specific period"""
     if client.client is None:
         await client.ainit()
 
     try:
         import datetime
+
         start_dt = datetime.datetime.fromisoformat(start_date)
         end_dt = datetime.datetime.fromisoformat(end_date)
 
         operations_response = await client.get_operations_for_period(
-            account_id=settings.account_id,
-            start_date=start_dt,
-            end_date=end_dt
+            account_id=settings.account_id, start_date=start_dt, end_date=end_dt
         )
 
         if not operations_response:
@@ -927,10 +1025,7 @@ async def get_period_profit(start_date: str, end_date: str, starting_balance: fl
 
         calculator = ProfitCalculator()
         period_profit = calculator.calculate_period_profit(
-            operations_response.operations,
-            start_dt,
-            end_dt,
-            starting_balance
+            operations_response.operations, start_dt, end_dt, starting_balance
         )
 
         return {
@@ -944,7 +1039,7 @@ async def get_period_profit(start_date: str, end_date: str, starting_balance: fl
             "profit_percentage": period_profit.profit_percentage,
             "trades_count": period_profit.trades_count,
             "winning_trades": period_profit.winning_trades,
-            "losing_trades": period_profit.losing_trades
+            "losing_trades": period_profit.losing_trades,
         }
 
     except Exception as e:
@@ -960,7 +1055,8 @@ async def get_enhanced_profit_analysis(days: int = 30):
 
     try:
         import datetime
-        moscow_tz = __import__('pytz').timezone('Europe/Moscow')
+
+        moscow_tz = __import__("pytz").timezone("Europe/Moscow")
         end_date = datetime.datetime.now(moscow_tz)
         start_date = end_date - datetime.timedelta(days=days)
 
@@ -968,49 +1064,54 @@ async def get_enhanced_profit_analysis(days: int = 30):
             settings.account_id, start_date, end_date, use_current_positions=True
         )
 
-        if 'error' in result:
-            return {"error": result['error']}
+        if "error" in result:
+            return {"error": result["error"]}
 
-        trades = result['trades']
-        analysis_report = result['analysis_report']
+        trades = result["trades"]
+        analysis_report = result["analysis_report"]
 
         return {
             "summary": {
-                "total_profit": result['total_profit'],
+                "total_profit": result["total_profit"],
                 "trades_count": len(trades),
                 "winning_trades": len([t for t in trades if t.net_profit > 0]),
                 "losing_trades": len([t for t in trades if t.net_profit < 0]),
-                "average_profit_per_trade": result['total_profit'] / len(trades) if trades else 0,
-                "method_used": result['method_used']
+                "average_profit_per_trade": result["total_profit"] / len(trades)
+                if trades
+                else 0,
+                "method_used": result["method_used"],
             },
             "positions": {
-                "starting_positions": result['starting_positions'],
-                "current_positions": result['current_positions'],
-                "starting_positions_count": len(result['starting_positions']),
-                "current_positions_count": len(result['current_positions'])
+                "starting_positions": result["starting_positions"],
+                "current_positions": result["current_positions"],
+                "starting_positions_count": len(result["starting_positions"]),
+                "current_positions_count": len(result["current_positions"]),
             },
-            "data_quality": analysis_report['data_quality'],
-            "recommendations": analysis_report['recommendations'],
+            "data_quality": analysis_report["data_quality"],
+            "recommendations": analysis_report["recommendations"],
             "problematic_trades": [
                 {
-                    "trade_id": issue['trade'].trade_id,
-                    "figi": issue['trade'].figi,
-                    "net_profit": issue['trade'].net_profit,
-                    "severity": issue['severity'],
-                    "issues": issue['issues']
-                } for issue in result['problematic_trades']
+                    "trade_id": issue["trade"].trade_id,
+                    "figi": issue["trade"].figi,
+                    "net_profit": issue["trade"].net_profit,
+                    "severity": issue["severity"],
+                    "issues": issue["issues"],
+                }
+                for issue in result["problematic_trades"]
             ],
-            "validation_result": result['validation_result'],
+            "validation_result": result["validation_result"],
             "position_history": {
                 figi: [
                     {
-                        "date": change['date'].isoformat() if change['date'] else None,
-                        "position": change['position'],
-                        "operation_type": change['operation_type'],
-                        "quantity": change.get('quantity', 0),
-                        "crosses_zero": change.get('crosses_zero', False)
-                    } for change in history[:10]  # Limit to first 10 changes per FIGI
-                ] for figi, history in result['position_history'].items()
+                        "date": change["date"].isoformat() if change["date"] else None,
+                        "position": change["position"],
+                        "operation_type": change["operation_type"],
+                        "quantity": change.get("quantity", 0),
+                        "crosses_zero": change.get("crosses_zero", False),
+                    }
+                    for change in history[:10]  # Limit to first 10 changes per FIGI
+                ]
+                for figi, history in result["position_history"].items()
             },
             "trades": [
                 {
@@ -1025,9 +1126,10 @@ async def get_enhanced_profit_analysis(days: int = 30):
                     "gross_profit": t.gross_profit,
                     "fees": t.fees,
                     "net_profit": t.net_profit,
-                    "variation_margin": t.variation_margin
-                } for t in trades
-            ]
+                    "variation_margin": t.variation_margin,
+                }
+                for t in trades
+            ],
         }
 
     except Exception as e:
@@ -1043,7 +1145,8 @@ async def get_profit_diagnostics(days: int = 30):
 
     try:
         import datetime
-        moscow_tz = __import__('pytz').timezone('Europe/Moscow')
+
+        moscow_tz = __import__("pytz").timezone("Europe/Moscow")
         end_date = datetime.datetime.now(moscow_tz)
         start_date = end_date - datetime.timedelta(days=days)
 
@@ -1051,27 +1154,28 @@ async def get_profit_diagnostics(days: int = 30):
             settings.account_id, start_date, end_date
         )
 
-        if 'error' in diagnosis:
-            return {"error": diagnosis['error']}
+        if "error" in diagnosis:
+            return {"error": diagnosis["error"]}
 
         return {
             "diagnosis": {
-                "severity": diagnosis['severity'],
-                "comparison": diagnosis['comparison'],
-                "issues_detected": diagnosis['issues_detected'],
-                "recommendations": diagnosis['recommendations'],
-                "specific_recommendations": diagnosis['specific_recommendations']
+                "severity": diagnosis["severity"],
+                "comparison": diagnosis["comparison"],
+                "issues_detected": diagnosis["issues_detected"],
+                "recommendations": diagnosis["recommendations"],
+                "specific_recommendations": diagnosis["specific_recommendations"],
             },
             "problematic_trades": [
                 {
-                    "trade_id": issue['trade'].trade_id,
-                    "figi": issue['trade'].figi,
-                    "net_profit": issue['trade'].net_profit,
-                    "severity": issue['severity'],
-                    "issues": issue['issues']
-                } for issue in diagnosis['problematic_trades']
+                    "trade_id": issue["trade"].trade_id,
+                    "figi": issue["trade"].figi,
+                    "net_profit": issue["trade"].net_profit,
+                    "severity": issue["severity"],
+                    "issues": issue["issues"],
+                }
+                for issue in diagnosis["problematic_trades"]
             ],
-            "validation_result": diagnosis['validation_result']
+            "validation_result": diagnosis["validation_result"],
         }
 
     except Exception as e:
@@ -1087,7 +1191,8 @@ async def get_position_analysis(days: int = 30):
 
     try:
         import datetime
-        moscow_tz = __import__('pytz').timezone('Europe/Moscow')
+
+        moscow_tz = __import__("pytz").timezone("Europe/Moscow")
         end_date = datetime.datetime.now(moscow_tz)
         start_date = end_date - datetime.timedelta(days=days)
 
@@ -1112,13 +1217,15 @@ async def get_position_analysis(days: int = 30):
         )
 
         # Get current positions
-        current_positions_response = await client.get_positions(account_id=settings.account_id)
+        current_positions_response = await client.get_positions(
+            account_id=settings.account_id
+        )
         current_positions = {}
         if current_positions_response:
-            if hasattr(current_positions_response, 'securities'):
+            if hasattr(current_positions_response, "securities"):
                 for security in current_positions_response.securities:
                     current_positions[security.figi] = int(security.balance)
-            if hasattr(current_positions_response, 'futures'):
+            if hasattr(current_positions_response, "futures"):
                 for future in current_positions_response.futures:
                     current_positions[future.figi] = int(future.balance)
 
@@ -1126,20 +1233,25 @@ async def get_position_analysis(days: int = 30):
             "period": {
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
-                "days": days
+                "days": days,
             },
             "positions": {
                 "starting_positions": starting_positions,
                 "current_positions": current_positions,
-                "instruments_count": len(set(list(starting_positions.keys()) + list(current_positions.keys())))
+                "instruments_count": len(
+                    set(
+                        list(starting_positions.keys()) + list(current_positions.keys())
+                    )
+                ),
             },
             "position_analysis": {
                 figi: {
                     "first_operation": analysis["first_operation"],
                     "total_operations": analysis["total_operations"],
-                    "possible_scenarios": analysis["possible_scenarios"]
-                } for figi, analysis in position_analysis.items()
-            }
+                    "possible_scenarios": analysis["possible_scenarios"],
+                }
+                for figi, analysis in position_analysis.items()
+            },
         }
 
     except Exception as e:
@@ -1148,89 +1260,23 @@ async def get_position_analysis(days: int = 30):
 
 
 @app.get("/api/table-compatible-profit")
-async def get_table_compatible_profit_analysis(days: int = 30, starting_balance: float = 0.0):
+async def get_table_compatible_profit_analysis(
+    days: int = 30, starting_balance: float = 0.0
+):
     """Get profit analysis compatible with table format"""
     if client.client is None:
         await client.ainit()
 
     try:
         import datetime
-        moscow_tz = __import__('pytz').timezone('Europe/Moscow')
+
+        moscow_tz = __import__("pytz").timezone("Europe/Moscow")
         end_date = datetime.datetime.now(moscow_tz)
         start_date = end_date - datetime.timedelta(days=days)
 
         # Get operations for the period
         operations_response = await client.get_operations_for_period(
-            account_id=settings.account_id,
-            start_date=start_date,
-            end_date=end_date
-        )
-
-        if not operations_response or not operations_response.operations:
-            return {
-                "error": "No operations found for the specified period",
-                "daily_data": {},
-                "summary": {
-                    "total_profit": 0.0,
-                    "total_commission": 0.0,
-                    "total_trades": 0,
-                    "total_day_clearing": 0.0,
-                    "total_evening_clearing": 0.0
-                },
-                "balance_progression": {},
-                "table_format": {
-                    "total_profit": 0.0,
-                    "total_commission": 0.0,
-                    "total_trades": 0,
-                    "daily_breakdown": {}
-                }
-            }
-
-        # Use table compatible calculator
-        from app.utils.profit_calculator import TableCompatibleProfitCalculator
-        calculator = TableCompatibleProfitCalculator()
-
-        result = calculator.get_table_compatible_analysis(
-            operations_response.operations,
-            starting_balance
-        )
-
-        return {
-            "method": "table_compatible",
-            "period": {
-                "start_date": start_date.isoformat(),
-                "end_date": end_date.isoformat(),
-                "days": days
-            },
-            "starting_balance": starting_balance,
-            "daily_data": result['daily_data'],
-            "summary": result['summary'],
-            "balance_progression": result['balance_progression'],
-            "table_format": result['table_format']
-        }
-
-    except Exception as e:
-        logger.error(f"Error in table compatible profit analysis: {e}")
-        return {"error": str(e)}
-
-
-@app.get("/api/exact-table-profit")
-async def get_exact_table_profit_analysis(days: int = 30, starting_balance: float = 0.0):
-    """Get profit analysis using exact table logic"""
-    if client.client is None:
-        await client.ainit()
-
-    try:
-        import datetime
-        moscow_tz = __import__('pytz').timezone('Europe/Moscow')
-        end_date = datetime.datetime.now(moscow_tz)
-        start_date = end_date - datetime.timedelta(days=days)
-
-        # Get operations for the period
-        operations_response = await client.get_operations_for_period(
-            account_id=settings.account_id,
-            start_date=start_date,
-            end_date=end_date
+            account_id=settings.account_id, start_date=start_date, end_date=end_date
         )
 
         if not operations_response or not operations_response.operations:
@@ -1243,24 +1289,92 @@ async def get_exact_table_profit_analysis(days: int = 30, starting_balance: floa
                     "total_trades": 0,
                     "total_day_clearing": 0.0,
                     "total_evening_clearing": 0.0,
-                    "total_earnings": 0.0
                 },
                 "balance_progression": {},
                 "table_format": {
                     "total_profit": 0.0,
                     "total_commission": 0.0,
                     "total_trades": 0,
-                    "daily_breakdown": {}
-                }
+                    "daily_breakdown": {},
+                },
+            }
+
+        # Use table compatible calculator
+        from app.utils.profit_calculator import TableCompatibleProfitCalculator
+
+        calculator = TableCompatibleProfitCalculator()
+
+        result = calculator.get_table_compatible_analysis(
+            operations_response.operations, starting_balance
+        )
+
+        return {
+            "method": "table_compatible",
+            "period": {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "days": days,
+            },
+            "starting_balance": starting_balance,
+            "daily_data": result["daily_data"],
+            "summary": result["summary"],
+            "balance_progression": result["balance_progression"],
+            "table_format": result["table_format"],
+        }
+
+    except Exception as e:
+        logger.error(f"Error in table compatible profit analysis: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/api/exact-table-profit")
+async def get_exact_table_profit_analysis(
+    days: int = 30, starting_balance: float = 0.0
+):
+    """Get profit analysis using exact table logic"""
+    if client.client is None:
+        await client.ainit()
+
+    try:
+        import datetime
+
+        moscow_tz = __import__("pytz").timezone("Europe/Moscow")
+        end_date = datetime.datetime.now(moscow_tz)
+        start_date = end_date - datetime.timedelta(days=days)
+
+        # Get operations for the period
+        operations_response = await client.get_operations_for_period(
+            account_id=settings.account_id, start_date=start_date, end_date=end_date
+        )
+
+        if not operations_response or not operations_response.operations:
+            return {
+                "error": "No operations found for the specified period",
+                "daily_data": {},
+                "summary": {
+                    "total_profit": 0.0,
+                    "total_commission": 0.0,
+                    "total_trades": 0,
+                    "total_day_clearing": 0.0,
+                    "total_evening_clearing": 0.0,
+                    "total_earnings": 0.0,
+                },
+                "balance_progression": {},
+                "table_format": {
+                    "total_profit": 0.0,
+                    "total_commission": 0.0,
+                    "total_trades": 0,
+                    "daily_breakdown": {},
+                },
             }
 
         # Use exact table calculator
         from app.utils.profit_calculator import TableExactCalculator
+
         calculator = TableExactCalculator()
 
         result = calculator.get_exact_table_analysis(
-            operations_response.operations,
-            starting_balance
+            operations_response.operations, starting_balance
         )
 
         return {
@@ -1268,13 +1382,13 @@ async def get_exact_table_profit_analysis(days: int = 30, starting_balance: floa
             "period": {
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
-                "days": days
+                "days": days,
             },
             "starting_balance": starting_balance,
-            "daily_data": result['daily_data'],
-            "summary": result['summary'],
-            "balance_progression": result['balance_progression'],
-            "table_format": result['table_format']
+            "daily_data": result["daily_data"],
+            "summary": result["summary"],
+            "balance_progression": result["balance_progression"],
+            "table_format": result["table_format"],
         }
 
     except Exception as e:
@@ -1307,23 +1421,31 @@ async def performance_page(request: Request):
 
 
 @app.get("/api/performance-data")
-async def get_performance_data(period: str = "week", weeks_back: int = 4, start_date: str = None, end_date: str = None):
+async def get_performance_data(
+    period: str = "week",
+    weeks_back: int = 4,
+    start_date: str = None,
+    end_date: str = None,
+):
     """Получить данные доходности за указанный период"""
     if client.client is None:
         await client.ainit()
 
     try:
         import datetime
-        moscow_tz = __import__('pytz').timezone('Europe/Moscow')
+
+        moscow_tz = __import__("pytz").timezone("Europe/Moscow")
 
         # Если заданы конкретные даты, используем их
         if start_date and end_date:
             try:
                 # Парсим даты в формате YYYY-MM-DD
-                start_date = datetime.datetime.strptime(
-                    start_date, "%Y-%m-%d").replace(tzinfo=moscow_tz)
-                end_date = datetime.datetime.strptime(
-                    end_date, "%Y-%m-%d").replace(tzinfo=moscow_tz)
+                start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").replace(
+                    tzinfo=moscow_tz
+                )
+                end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").replace(
+                    tzinfo=moscow_tz
+                )
                 # Добавляем время до конца дня для end_date
                 end_date = end_date.replace(hour=23, minute=59, second=59)
             except ValueError:
@@ -1336,29 +1458,28 @@ async def get_performance_data(period: str = "week", weeks_back: int = 4, start_
             if period == "week":
                 start_date = end_date - datetime.timedelta(weeks=weeks_back)
             elif period == "month":
-                start_date = end_date - \
-                    datetime.timedelta(days=30 * weeks_back)
+                start_date = end_date - datetime.timedelta(days=30 * weeks_back)
             else:
                 start_date = end_date - datetime.timedelta(weeks=4)
 
         # Получаем операции за период
         operations_response = await client.get_operations(
-            account_id=settings.account_id,
-            from_=start_date,
-            to=end_date
+            account_id=settings.account_id, from_=start_date, to=end_date
         )
 
         if not operations_response or not operations_response.operations:
             return {"error": "No operations found for the period"}
 
         # Группируем данные по периодам
-        performance_data = await _group_operations_by_period(operations_response.operations, period, start_date, end_date, client)
+        performance_data = await _group_operations_by_period(
+            operations_response.operations, period, start_date, end_date, client
+        )
 
         return {
             "period": period,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
-            "data": performance_data
+            "data": performance_data,
         }
 
     except Exception as e:
@@ -1366,13 +1487,16 @@ async def get_performance_data(period: str = "week", weeks_back: int = 4, start_
         return {"error": str(e)}
 
 
-async def _group_operations_by_period(operations, period_type, start_date, end_date, client_instance):
+async def _group_operations_by_period(
+    operations, period_type, start_date, end_date, client_instance
+):
     """Группирует операции по периодам (неделя/месяц) с правильным расчетом баланса"""
     import datetime
     from collections import defaultdict
 
     # Убеждаемся что start_date и end_date имеют timezone
     import pytz
+
     utc_tz = pytz.UTC
     if start_date.tzinfo is None:
         start_date = utc_tz.localize(start_date)
@@ -1380,115 +1504,125 @@ async def _group_operations_by_period(operations, period_type, start_date, end_d
         end_date = utc_tz.localize(end_date)
 
     # Группируем операции по периодам
-    periods = defaultdict(lambda: {
-        'start_date': None,
-        'end_date': None,
-        'day_clearing': 0.0,  # Дневная клиринговая (вариационная маржа)
-        'evening_clearing': 0.0,  # Вечерняя клиринговая (вариационная маржа)
-        'trades_count': 0,
-        'commission': 0.0,
-        'total_profit': 0.0,
-        'operations': []
-    })
+    periods = defaultdict(
+        lambda: {
+            "start_date": None,
+            "end_date": None,
+            "day_clearing": 0.0,  # Дневная клиринговая (вариационная маржа)
+            "evening_clearing": 0.0,  # Вечерняя клиринговая (вариационная маржа)
+            "trades_count": 0,
+            "commission": 0.0,
+            "total_profit": 0.0,
+            "operations": [],
+        }
+    )
 
     for operation in operations:
         # Определяем период для операции
         op_date = operation.date
         # Сохраняем timezone из операции - операции уже имеют UTC timezone
-        logger.info(
-            f"DEBUG: operation.date = {op_date} (tzinfo: {op_date.tzinfo})")
+        logger.info(f"DEBUG: operation.date = {op_date} (tzinfo: {op_date.tzinfo})")
 
         if period_type == "week":
             # Группируем по неделям (понедельник - воскресенье)
             week_start = op_date - datetime.timedelta(days=op_date.weekday())
-            week_start = week_start.replace(
-                hour=0, minute=0, second=0, microsecond=0)
-            period_key = week_start.strftime('%Y-W%U')
+            week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+            period_key = week_start.strftime("%Y-W%U")
             period_start = week_start
-            period_end = week_start + \
-                datetime.timedelta(days=6, hours=23, minutes=59, seconds=59)
+            period_end = week_start + datetime.timedelta(
+                days=6, hours=23, minutes=59, seconds=59
+            )
         else:  # month
             # Группируем по месяцам
             month_start = op_date.replace(
-                day=1, hour=0, minute=0, second=0, microsecond=0)
-            period_key = month_start.strftime('%Y-%m')
+                day=1, hour=0, minute=0, second=0, microsecond=0
+            )
+            period_key = month_start.strftime("%Y-%m")
             period_start = month_start
             # Последний день месяца
             next_month = month_start + datetime.timedelta(days=32)
-            period_end = next_month.replace(
-                day=1) - datetime.timedelta(seconds=1)
+            period_end = next_month.replace(day=1) - datetime.timedelta(seconds=1)
 
         # Инициализируем период если не существует
-        if periods[period_key]['start_date'] is None:
+        if periods[period_key]["start_date"] is None:
             # Добавляем timezone к датам периодов только если их нет
             import pytz
+
             utc_tz = pytz.UTC
             if period_start.tzinfo is None:
-                periods[period_key]['start_date'] = utc_tz.localize(
-                    period_start)
+                periods[period_key]["start_date"] = utc_tz.localize(period_start)
             else:
-                periods[period_key]['start_date'] = period_start
+                periods[period_key]["start_date"] = period_start
             if period_end.tzinfo is None:
-                periods[period_key]['end_date'] = utc_tz.localize(period_end)
+                periods[period_key]["end_date"] = utc_tz.localize(period_end)
             else:
-                periods[period_key]['end_date'] = period_end
+                periods[period_key]["end_date"] = period_end
 
         # Добавляем операцию
-        periods[period_key]['operations'].append(operation)
+        periods[period_key]["operations"].append(operation)
 
         # Обрабатываем операцию по типу
-        if operation.operation_type.name == 'OPERATION_TYPE_BROKER_FEE':
-            periods[period_key]['commission'] += abs(
-                quotation_to_float(operation.payment))
-        elif operation.operation_type.name in ['OPERATION_TYPE_WRITING_OFF_VARMARGIN', 'OPERATION_TYPE_ACCRUING_VARMARGIN']:
+        if operation.operation_type.name == "OPERATION_TYPE_BROKER_FEE":
+            periods[period_key]["commission"] += abs(
+                quotation_to_float(operation.payment)
+            )
+        elif operation.operation_type.name in [
+            "OPERATION_TYPE_WRITING_OFF_VARMARGIN",
+            "OPERATION_TYPE_ACCRUING_VARMARGIN",
+        ]:
             margin_amount = quotation_to_float(operation.payment)
             # Определяем дневная или вечерняя клиринговая по времени
             operation_hour = op_date.hour
             if 10 <= operation_hour <= 13:  # Дневная клиринговая (10:00-14:00)
-                periods[period_key]['day_clearing'] += margin_amount
+                periods[period_key]["day_clearing"] += margin_amount
             else:  # Вечерняя клиринговая (14:05-18:50 и остальное время)
-                periods[period_key]['evening_clearing'] += margin_amount
-        elif operation.operation_type.name in ['OPERATION_TYPE_BUY', 'OPERATION_TYPE_SELL']:
-            periods[period_key]['trades_count'] += 1
-            periods[period_key]['total_profit'] += quotation_to_float(
-                operation.payment)
+                periods[period_key]["evening_clearing"] += margin_amount
+        elif operation.operation_type.name in [
+            "OPERATION_TYPE_BUY",
+            "OPERATION_TYPE_SELL",
+        ]:
+            periods[period_key]["trades_count"] += 1
+            periods[period_key]["total_profit"] += quotation_to_float(operation.payment)
         else:
             # Прочие операции тоже включаем в общую прибыль
-            periods[period_key]['total_profit'] += quotation_to_float(
-                operation.payment)
+            periods[period_key]["total_profit"] += quotation_to_float(operation.payment)
 
     # Преобразуем в список и сортируем по дате
     result = []
     for period_key, period_data in periods.items():
         # Рассчитываем итоговые показатели
-        gross_profit = period_data['day_clearing'] + \
-            period_data['evening_clearing']
-        net_profit = gross_profit - period_data['commission']
+        gross_profit = period_data["day_clearing"] + period_data["evening_clearing"]
+        net_profit = gross_profit - period_data["commission"]
 
-        result.append({
-            'period': period_key,
-            'start_date': period_data['start_date'].strftime('%d.%m.%Y'),
-            'end_date': period_data['end_date'].strftime('%d.%m.%Y'),
-            'day_clearing': period_data['day_clearing'],
-            'evening_clearing': period_data['evening_clearing'],
-            'trades_count': period_data['trades_count'],
-            'commission': period_data['commission'],
-            'gross_profit': gross_profit,
-            'net_profit': net_profit,
-            'sort_date': period_data['start_date'],  # Для сортировки
-            'period_start_datetime': period_data['start_date'],
-            'period_end_datetime': period_data['end_date']
-        })
+        result.append(
+            {
+                "period": period_key,
+                "start_date": period_data["start_date"].strftime("%d.%m.%Y"),
+                "end_date": period_data["end_date"].strftime("%d.%m.%Y"),
+                "day_clearing": period_data["day_clearing"],
+                "evening_clearing": period_data["evening_clearing"],
+                "trades_count": period_data["trades_count"],
+                "commission": period_data["commission"],
+                "gross_profit": gross_profit,
+                "net_profit": net_profit,
+                "sort_date": period_data["start_date"],  # Для сортировки
+                "period_start_datetime": period_data["start_date"],
+                "period_end_datetime": period_data["end_date"],
+            }
+        )
 
     # Сортируем по дате
-    result.sort(key=lambda x: x['sort_date'])
+    result.sort(key=lambda x: x["sort_date"])
 
     # ПРАВИЛЬНЫЙ расчет балансов: используем текущий баланс как отправную точку
     try:
         # Получаем текущий баланс
-        current_portfolio = await client_instance.get_portfolio(account_id=settings.account_id)
-        current_balance = quotation_to_float(current_portfolio.total_amount_shares) + \
-            quotation_to_float(current_portfolio.total_amount_currencies)
+        current_portfolio = await client_instance.get_portfolio(
+            account_id=settings.account_id
+        )
+        current_balance = quotation_to_float(
+            current_portfolio.total_amount_shares
+        ) + quotation_to_float(current_portfolio.total_amount_currencies)
 
         logger.info(f"Текущий баланс портфеля: {current_balance:,.2f} ₽")
 
@@ -1497,116 +1631,122 @@ async def _group_operations_by_period(operations, period_type, start_date, end_d
         period_operations = []
         for op in operations:
             # Проверяем тип операции
-            op_type = getattr(op, 'operation_type', getattr(op, 'type', None))
+            op_type = getattr(op, "operation_type", getattr(op, "type", None))
             if op_type and op_type.name in [
-                'OPERATION_TYPE_WRITING_OFF_VARMARGIN',
-                'OPERATION_TYPE_ACCRUING_VARMARGIN',
-                'OPERATION_TYPE_BUY',
-                'OPERATION_TYPE_SELL',
-                'OPERATION_TYPE_BROKER_FEE',
-                'OPERATION_TYPE_INPUT',
-                'OPERATION_TYPE_OUTPUT'
+                "OPERATION_TYPE_WRITING_OFF_VARMARGIN",
+                "OPERATION_TYPE_ACCRUING_VARMARGIN",
+                "OPERATION_TYPE_BUY",
+                "OPERATION_TYPE_SELL",
+                "OPERATION_TYPE_BROKER_FEE",
+                "OPERATION_TYPE_INPUT",
+                "OPERATION_TYPE_OUTPUT",
             ]:
                 period_operations.append(op)
 
-        logger.info(
-            f"Операций за анализируемый период: {len(period_operations)}")
+        logger.info(f"Операций за анализируемый период: {len(period_operations)}")
 
         # Рассчитываем балансы накопительно от текущего баланса
         # Начинаем с самого раннего периода и идем вперед
         running_balance = current_balance
 
         # Сортируем периоды по дате (от старых к новым)
-        sorted_periods = sorted(result, key=lambda x: x['sort_date'])
+        sorted_periods = sorted(result, key=lambda x: x["sort_date"])
 
         for i, period in enumerate(sorted_periods):
             # Для первого периода используем текущий баланс как конечный
             if i == 0:
-                period['balance_end'] = running_balance
-                period['balance_start'] = running_balance - \
-                    period['net_profit']
+                period["balance_end"] = running_balance
+                period["balance_start"] = running_balance - period["net_profit"]
             else:
                 # Для остальных периодов: начало = конец предыдущего
-                period['balance_end'] = running_balance
-                period['balance_start'] = running_balance - \
-                    period['net_profit']
+                period["balance_end"] = running_balance
+                period["balance_start"] = running_balance - period["net_profit"]
 
             # Обновляем running_balance для следующего периода
-            running_balance = period['balance_start']
+            running_balance = period["balance_start"]
 
             # Рассчитываем процент доходности
-            if abs(period['balance_start']) > 0.01:
-                period['profit_percentage'] = (
-                    period['net_profit'] / abs(period['balance_start'])) * 100
+            if abs(period["balance_start"]) > 0.01:
+                period["profit_percentage"] = (
+                    period["net_profit"] / abs(period["balance_start"])
+                ) * 100
             else:
-                period['profit_percentage'] = 0.0
+                period["profit_percentage"] = 0.0
 
-            logger.info(f"Период {period['start_date']} - {period['end_date']}: "
-                        f"баланс {period['balance_start']:,.2f} → {period['balance_end']:,.2f} ₽, "
-                        f"прибыль: {period['net_profit']:,.2f} ₽")
+            logger.info(
+                f"Период {period['start_date']} - {period['end_date']}: "
+                f"баланс {period['balance_start']:,.2f} → {period['balance_end']:,.2f} ₽, "
+                f"прибыль: {period['net_profit']:,.2f} ₽"
+            )
 
         # Пересортируем обратно по дате (от новых к старым)
-        result.sort(key=lambda x: x['sort_date'], reverse=True)
+        result.sort(key=lambda x: x["sort_date"], reverse=True)
 
     except Exception as e:
         logger.error(f"Error calculating balances: {e}")
         # Если не удалось получить баланс, используем текущий баланс как базу для всех периодов
         try:
-            current_portfolio = await client_instance.get_portfolio(account_id=settings.account_id)
-            fallback_balance = quotation_to_float(current_portfolio.total_amount_shares) + \
-                quotation_to_float(current_portfolio.total_amount_currencies)
-            logger.info(
-                f"Using current balance as fallback: {fallback_balance:,.2f} ₽")
+            current_portfolio = await client_instance.get_portfolio(
+                account_id=settings.account_id
+            )
+            fallback_balance = quotation_to_float(
+                current_portfolio.total_amount_shares
+            ) + quotation_to_float(current_portfolio.total_amount_currencies)
+            logger.info(f"Using current balance as fallback: {fallback_balance:,.2f} ₽")
         except:
             # Крайний случай - не можем получить даже текущий баланс
             fallback_balance = 0.0
-            logger.warning(
-                "Cannot get current balance, setting all balances to 0")
+            logger.warning("Cannot get current balance, setting all balances to 0")
 
         # В fallback режиме тоже используем накопительную логику
         running_balance = fallback_balance
         for i, period in enumerate(result):
             if i == 0:
-                period['balance_start'] = fallback_balance
+                period["balance_start"] = fallback_balance
             else:
-                period['balance_start'] = running_balance
+                period["balance_start"] = running_balance
 
-            period['balance_end'] = period['balance_start'] + \
-                period['net_profit']
-            period['profit_percentage'] = (
-                period['net_profit'] / period['balance_start'] * 100) if period['balance_start'] > 0 else 0.0
-            running_balance = period['balance_end']
+            period["balance_end"] = period["balance_start"] + period["net_profit"]
+            period["profit_percentage"] = (
+                (period["net_profit"] / period["balance_start"] * 100)
+                if period["balance_start"] > 0
+                else 0.0
+            )
+            running_balance = period["balance_end"]
 
     # Удаляем служебные поля (но оставляем period_start_datetime для расчета балансов)
     for period in result:
-        if 'sort_date' in period:
-            del period['sort_date']
-        if 'period_end_datetime' in period:
-            del period['period_end_datetime']
+        if "sort_date" in period:
+            del period["sort_date"]
+        if "period_end_datetime" in period:
+            del period["period_end_datetime"]
 
     return result
 
 
-async def _calculate_period_balances(periods, base_balance, all_operations, analysis_start=None):
+async def _calculate_period_balances(
+    periods, base_balance, all_operations, analysis_start=None
+):
     """
     ЧЕСТНЫЙ расчет балансов: текущий_баланс - операции_после_даты = баланс_на_дату
     """
     import datetime
+
     import pytz
 
     # Фильтруем только финансовые операции
     financial_operations = []
     for op in all_operations:
         # Проверяем тип операции (может быть operation_type или type)
-        op_type = getattr(op, 'operation_type', getattr(op, 'type', None))
+        op_type = getattr(op, "operation_type", getattr(op, "type", None))
         if op_type and op_type.name in [
-                'OPERATION_TYPE_WRITING_OFF_VARMARGIN',
-                'OPERATION_TYPE_ACCRUING_VARMARGIN',
-                'OPERATION_TYPE_BUY',
-            'OPERATION_TYPE_SELL',
-            'OPERATION_TYPE_BROKER_FEE',
-            'OPERATION_TYPE_INPUT',
-            'OPERATION_TYPE_OUTPUT'
+            "OPERATION_TYPE_WRITING_OFF_VARMARGIN",
+            "OPERATION_TYPE_ACCRUING_VARMARGIN",
+            "OPERATION_TYPE_BUY",
+            "OPERATION_TYPE_SELL",
+            "OPERATION_TYPE_BROKER_FEE",
+            "OPERATION_TYPE_INPUT",
+            "OPERATION_TYPE_OUTPUT",
         ]:
             # Ensure operation date has timezone info
             op_date = op.date
@@ -1614,13 +1754,12 @@ async def _calculate_period_balances(periods, base_balance, all_operations, anal
                 # If no timezone info, assume UTC
                 op_date = pytz.UTC.localize(op_date)
 
-            financial_operations.append({
-                'date': op_date,
-                'amount': quotation_to_float(op.payment)
-            })
+            financial_operations.append(
+                {"date": op_date, "amount": quotation_to_float(op.payment)}
+            )
 
     # Сортируем операции по дате (от старых к новым)
-    financial_operations.sort(key=lambda x: x['date'])
+    financial_operations.sort(key=lambda x: x["date"])
 
     logger.info(f"Базовый баланс портфеля: {base_balance:,.2f} ₽")
     logger.info(f"Всего финансовых операций: {len(financial_operations)}")
@@ -1628,11 +1767,10 @@ async def _calculate_period_balances(periods, base_balance, all_operations, anal
     # ЧЕСТНЫЙ РАСЧЕТ: идем от базового баланса назад по времени
     for i, period in enumerate(periods):
         # Получаем дату начала периода
-        if 'period_start_datetime' in period:
-            period_start = period['period_start_datetime']
+        if "period_start_datetime" in period:
+            period_start = period["period_start_datetime"]
         else:
-            period_start = datetime.datetime.strptime(
-                period['start_date'], '%d.%m.%Y')
+            period_start = datetime.datetime.strptime(period["start_date"], "%d.%m.%Y")
 
         # Убеждаемся что period_start имеет timezone
         if period_start.tzinfo is None:
@@ -1641,55 +1779,64 @@ async def _calculate_period_balances(periods, base_balance, all_operations, anal
 
         # Добавляем детальное логирование для отладки timezone
         logger.info(
-            f"DEBUG: period_start = {period_start} (tzinfo: {period_start.tzinfo})")
+            f"DEBUG: period_start = {period_start} (tzinfo: {period_start.tzinfo})"
+        )
         if financial_operations:
             logger.info(
-                f"DEBUG: first_op_date = {financial_operations[0]['date']} (tzinfo: {financial_operations[0]['date'].tzinfo})")
+                f"DEBUG: first_op_date = {financial_operations[0]['date']} (tzinfo: {financial_operations[0]['date'].tzinfo})"
+            )
 
         operations_after_start = [
-            op for op in financial_operations if op['date'] > period_start]
+            op for op in financial_operations if op["date"] > period_start
+        ]
 
         # Сумма всех операций после начала периода
-        total_operations_after = sum(op['amount']
-                                     for op in operations_after_start)
+        total_operations_after = sum(op["amount"] for op in operations_after_start)
 
         # Баланс на начало периода = базовый_баланс - операции_после_начала_периода
         balance_start = base_balance - total_operations_after
 
         # Баланс на конец периода = баланс_начала + прибыль_периода
-        balance_end = balance_start + period['net_profit']
+        balance_end = balance_start + period["net_profit"]
 
         # Устанавливаем рассчитанные значения
-        period['balance_start'] = balance_start
-        period['balance_end'] = balance_end
+        period["balance_start"] = balance_start
+        period["balance_end"] = balance_end
 
         # Рассчитываем процент доходности
         if abs(balance_start) > 0.01:
-            period['profit_percentage'] = (
-                period['net_profit'] / abs(balance_start)) * 100
+            period["profit_percentage"] = (
+                period["net_profit"] / abs(balance_start)
+            ) * 100
         else:
-            period['profit_percentage'] = 0.0
+            period["profit_percentage"] = 0.0
 
-        logger.info(
-            f"Период {i+1}: {period['start_date']} - {period['end_date']}")
+        logger.info(f"Период {i + 1}: {period['start_date']} - {period['end_date']}")
         logger.info(f"  Операций после начала: {len(operations_after_start)}")
         logger.info(f"  Сумма операций после: {total_operations_after:,.2f} ₽")
         logger.info(f"  Баланс: {balance_start:,.2f} → {balance_end:,.2f} ₽")
         logger.info(f"  Прибыль: {period['net_profit']:,.2f} ₽")
 
 
-async def _calculate_dynamic_initial_balance(operations, target_start_date, client_instance):
+async def _calculate_dynamic_initial_balance(
+    operations, target_start_date, client_instance
+):
     """Динамически рассчитывает начальный баланс для указанной даты без хардкода"""
     import datetime
     import logging
+
     import pytz
+
     logger = logging.getLogger(__name__)
 
     # Получаем текущий баланс портфеля
     try:
-        current_portfolio = await client_instance.get_portfolio(account_id=settings.account_id)
-        current_balance = quotation_to_float(current_portfolio.total_amount_shares) + \
-            quotation_to_float(current_portfolio.total_amount_currencies)
+        current_portfolio = await client_instance.get_portfolio(
+            account_id=settings.account_id
+        )
+        current_balance = quotation_to_float(
+            current_portfolio.total_amount_shares
+        ) + quotation_to_float(current_portfolio.total_amount_currencies)
         logger.info(f"Текущий баланс портфеля: {current_balance:,.2f} ₽")
     except Exception as e:
         logger.error(f"Ошибка получения текущего баланса: {e}")
@@ -1697,33 +1844,32 @@ async def _calculate_dynamic_initial_balance(operations, target_start_date, clie
 
     try:
         # Получаем ВСЕ операции до целевой даты используя курсор
-        logger.info(
-            f"Получаем все операции до {target_start_date} используя курсор...")
+        logger.info(f"Получаем все операции до {target_start_date} используя курсор...")
 
         # Используем новый метод с limit и offset для получения всех операций
         all_operations = await client_instance.get_all_operations_for_period(
             account_id=settings.account_id,
             # Получаем все операции с 2010 года
             start_date=datetime.datetime(2010, 1, 1),
-            end_date=datetime.datetime.now()
+            end_date=datetime.datetime.now(),
         )
 
         if not all_operations:
             logger.warning(
-                "Не удалось получить операции через курсор, используем fallback")
+                "Не удалось получить операции через курсор, используем fallback"
+            )
             # Fallback к старому методу
             historical_start = datetime.datetime(2024, 1, 1)
             current_time = datetime.datetime.now()
 
             all_operations_response = await client_instance.get_operations(
-                account_id=settings.account_id,
-                from_=historical_start,
-                to=current_time
+                account_id=settings.account_id, from_=historical_start, to=current_time
             )
 
             if not all_operations_response or not all_operations_response.operations:
                 logger.warning(
-                    "Нет данных операций, используем текущий баланс с поправкой")
+                    "Нет данных операций, используем текущий баланс с поправкой"
+                )
                 return current_balance * 1.8
 
             all_operations = all_operations_response.operations
@@ -1748,56 +1894,57 @@ async def _calculate_dynamic_initial_balance(operations, target_start_date, clie
         total_profit_after_target = 0.0
         for op in operations_after_target:
             # Проверяем тип операции (может быть operation_type или type)
-            op_type = getattr(op, 'operation_type',
-                              None) or getattr(op, 'type', None)
-            if op_type and hasattr(op_type, 'name'):
+            op_type = getattr(op, "operation_type", None) or getattr(op, "type", None)
+            if op_type and hasattr(op_type, "name"):
                 op_type_name = op_type.name
             else:
                 op_type_name = str(op_type)
 
             if op_type_name in [
-                'OPERATION_TYPE_WRITING_OFF_VARMARGIN',
-                'OPERATION_TYPE_ACCRUING_VARMARGIN',
-                'OPERATION_TYPE_BUY',
-                'OPERATION_TYPE_SELL',
-                'OPERATION_TYPE_BROKER_FEE',
-                'OPERATION_TYPE_INPUT',
-                'OPERATION_TYPE_OUTPUT'
+                "OPERATION_TYPE_WRITING_OFF_VARMARGIN",
+                "OPERATION_TYPE_ACCRUING_VARMARGIN",
+                "OPERATION_TYPE_BUY",
+                "OPERATION_TYPE_SELL",
+                "OPERATION_TYPE_BROKER_FEE",
+                "OPERATION_TYPE_INPUT",
+                "OPERATION_TYPE_OUTPUT",
             ]:
                 total_profit_after_target += quotation_to_float(op.payment)
 
-        logger.info(
-            f"Прибыль после целевой даты: {total_profit_after_target:,.2f} ₽")
+        logger.info(f"Прибыль после целевой даты: {total_profit_after_target:,.2f} ₽")
 
         # Базовый расчет: баланс_на_целевую_дату = текущий_баланс - прибыль_после_даты
         calculated_balance = current_balance - total_profit_after_target
 
         logger.info(
-            f"Рассчитанный баланс на {target_start_date}: {calculated_balance:,.2f} ₽")
+            f"Рассчитанный баланс на {target_start_date}: {calculated_balance:,.2f} ₽"
+        )
 
         # Если получился отрицательный баланс, значит есть начальный капитал
         if calculated_balance <= 0:
             logger.info(
-                "Рассчитанный баланс отрицательный, корректируем с учетом начального капитала")
+                "Рассчитанный баланс отрицательный, корректируем с учетом начального капитала"
+            )
 
             # Рассчитываем общую прибыль с начала доступных данных
             total_profit_all_time = 0.0
             for op in all_operations:
-                op_type = getattr(op, 'operation_type',
-                                  None) or getattr(op, 'type', None)
-                if op_type and hasattr(op_type, 'name'):
+                op_type = getattr(op, "operation_type", None) or getattr(
+                    op, "type", None
+                )
+                if op_type and hasattr(op_type, "name"):
                     op_type_name = op_type.name
                 else:
                     op_type_name = str(op_type)
 
                 if op_type_name in [
-                    'OPERATION_TYPE_WRITING_OFF_VARMARGIN',
-                    'OPERATION_TYPE_ACCRUING_VARMARGIN',
-                    'OPERATION_TYPE_BUY',
-                    'OPERATION_TYPE_SELL',
-                    'OPERATION_TYPE_BROKER_FEE',
-                    'OPERATION_TYPE_INPUT',
-                    'OPERATION_TYPE_OUTPUT'
+                    "OPERATION_TYPE_WRITING_OFF_VARMARGIN",
+                    "OPERATION_TYPE_ACCRUING_VARMARGIN",
+                    "OPERATION_TYPE_BUY",
+                    "OPERATION_TYPE_SELL",
+                    "OPERATION_TYPE_BROKER_FEE",
+                    "OPERATION_TYPE_INPUT",
+                    "OPERATION_TYPE_OUTPUT",
                 ]:
                     total_profit_all_time += quotation_to_float(op.payment)
 
@@ -1816,49 +1963,49 @@ async def _calculate_dynamic_initial_balance(operations, target_start_date, clie
                 if current_time.tzinfo is None:
                     current_time = pytz.UTC.localize(current_time)
 
-                days_from_start_to_target = (
-                    target_start_date - earliest_date).days
+                days_from_start_to_target = (target_start_date - earliest_date).days
                 days_from_start_to_now = (current_time - earliest_date).days
 
                 if days_from_start_to_now > 0:
                     # Начальный капитал распределяется пропорционально времени
                     time_factor = days_from_start_to_target / days_from_start_to_now
-                    adjusted_initial_capital = estimated_initial_capital * \
-                        (1 - time_factor)
+                    adjusted_initial_capital = estimated_initial_capital * (
+                        1 - time_factor
+                    )
 
                     # Пересчитываем баланс с учетом начального капитала
-                    calculated_balance = adjusted_initial_capital - total_profit_after_target
+                    calculated_balance = (
+                        adjusted_initial_capital - total_profit_after_target
+                    )
                     logger.info(
-                        f"Скорректированный баланс с учетом начального капитала: {calculated_balance:,.2f} ₽")
+                        f"Скорректированный баланс с учетом начального капитала: {calculated_balance:,.2f} ₽"
+                    )
                 else:
                     calculated_balance = current_balance
 
         # Если получился разумный результат, используем его
         if calculated_balance > 1000:
-            logger.info(
-                f"Используем рассчитанный баланс: {calculated_balance:,.2f} ₽")
+            logger.info(f"Используем рассчитанный баланс: {calculated_balance:,.2f} ₽")
             return calculated_balance
 
         # Иначе используем анализ периодов для корректировки
-        logger.info(
-            "Рассчитанный баланс слишком мал, используем анализ периодов")
+        logger.info("Рассчитанный баланс слишком мал, используем анализ периодов")
 
         # Группируем операции по месяцам для понимания паттернов
         monthly_data = {}
         for op in all_operations:
-            op_type = getattr(op, 'operation_type',
-                              None) or getattr(op, 'type', None)
-            if op_type and hasattr(op_type, 'name'):
+            op_type = getattr(op, "operation_type", None) or getattr(op, "type", None)
+            if op_type and hasattr(op_type, "name"):
                 op_type_name = op_type.name
             else:
                 op_type_name = str(op_type)
 
             if op_type_name in [
-                'OPERATION_TYPE_WRITING_OFF_VARMARGIN',
-                'OPERATION_TYPE_ACCRUING_VARMARGIN',
-                'OPERATION_TYPE_BUY',
-                'OPERATION_TYPE_SELL',
-                'OPERATION_TYPE_BROKER_FEE'
+                "OPERATION_TYPE_WRITING_OFF_VARMARGIN",
+                "OPERATION_TYPE_ACCRUING_VARMARGIN",
+                "OPERATION_TYPE_BUY",
+                "OPERATION_TYPE_SELL",
+                "OPERATION_TYPE_BROKER_FEE",
             ]:
                 month_key = f"{op.date.year}-{op.date.month:02d}"
                 if month_key not in monthly_data:
@@ -1869,8 +2016,7 @@ async def _calculate_dynamic_initial_balance(operations, target_start_date, clie
         sorted_months = sorted(monthly_data.keys())
         if len(sorted_months) >= 2:
             # Используем данные последних месяцев для экстраполяции
-            recent_profits = [monthly_data[month]
-                              for month in sorted_months[-3:]]
+            recent_profits = [monthly_data[month] for month in sorted_months[-3:]]
             avg_monthly_profit = sum(recent_profits) / len(recent_profits)
 
             # Рассчитываем количество месяцев от цели до сейчас
@@ -1883,23 +2029,25 @@ async def _calculate_dynamic_initial_balance(operations, target_start_date, clie
             if current_month.tzinfo is None:
                 current_month = pytz.UTC.localize(current_month)
 
-            months_diff = ((current_month.year - target_month.year) * 12 +
-                           (current_month.month - target_month.month))
+            months_diff = (current_month.year - target_month.year) * 12 + (
+                current_month.month - target_month.month
+            )
 
             # Экстраполируем баланс назад
-            extrapolated_balance = current_balance - \
-                (avg_monthly_profit * months_diff)
+            extrapolated_balance = current_balance - (avg_monthly_profit * months_diff)
 
             # Если экстраполяция дает разумный результат, используем ее
             if extrapolated_balance > current_balance * 0.3:
                 logger.info(
-                    f"Используем экстраполированный баланс: {extrapolated_balance:,.2f} ₽")
+                    f"Используем экстраполированный баланс: {extrapolated_balance:,.2f} ₽"
+                )
                 return extrapolated_balance
 
         # Если все методы не дают разумного результата, используем адаптивную модель
         days_since_target = (datetime.datetime.now() - target_start_date).days
-        growth_factor = 1 + (days_since_target / 365.0) * \
-            0.5  # Предполагаем умеренный рост
+        growth_factor = (
+            1 + (days_since_target / 365.0) * 0.5
+        )  # Предполагаем умеренный рост
 
         final_balance = current_balance * growth_factor
         logger.info(f"Используем адаптивную модель: {final_balance:,.2f} ₽")

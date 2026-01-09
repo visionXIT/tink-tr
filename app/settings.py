@@ -1,7 +1,5 @@
-import logging
-
 from dotenv import load_dotenv
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 load_dotenv(".env")
 
@@ -12,8 +10,6 @@ class Settings(BaseSettings):
     account_id: str
     password: str = "2"
     sandbox: bool = False
-    log_level = logging.DEBUG
-    tinkoff_library_log_level = logging.INFO
 
     class Config:
         env_file = ".env"

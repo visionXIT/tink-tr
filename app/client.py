@@ -1,24 +1,24 @@
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
-from tinkoff.invest import (
+from t_tech.invest import (
     AsyncClient,
-    PostOrderResponse,
+    Client,
     GetLastPricesResponse,
-    OrderState,
     GetTradingStatusResponse,
     InstrumentResponse,
-    Client,
+    OrderState,
+    PostOrderResponse,
 )
-from tinkoff.invest.async_services import AsyncServices
-from tinkoff.invest.services import Services
+from t_tech.invest.async_services import AsyncServices
+from t_tech.invest.services import Services
 
 from app.settings import settings
 from app.utils.quotation import quotation_to_float
 
 
-class TinkoffClient:
+class t_techClient:
     """
-    Wrapper for tinkoff.invest.AsyncClient.
+    Wrapper for t_tech.invest.AsyncClient.
     Takes responsibility for choosing correct function to call basing on sandbox mode flag.
     """
 
@@ -29,7 +29,9 @@ class TinkoffClient:
         self.sync_client: Optional[Services] = None
 
     async def ainit(self):
-        self.client = await AsyncClient(token=self.token, app_name=settings.app_name).__aenter__()
+        self.client = await AsyncClient(
+            token=self.token, app_name=settings.app_name
+        ).__aenter__()
 
     async def get_operations(self, **kwagrs):
         if self.sandbox:
@@ -43,18 +45,16 @@ class TinkoffClient:
             return await self.client.sandbox.get_sandbox_operations(**kwargs)
 
         # getOperationsByCursor requires GetOperationsByCursorRequest object
-        from tinkoff.invest.schemas import GetOperationsByCursorRequest
+        from t_tech.invest.schemas import GetOperationsByCursorRequest
 
         # Extract parameters
-        account_id = kwargs.get('account_id', '')
-        from_date = kwargs.get('from_', None)
-        to_date = kwargs.get('to', None)
+        account_id = kwargs.get("account_id", "")
+        from_date = kwargs.get("from_", None)
+        to_date = kwargs.get("to", None)
 
         # Create request object
         request = GetOperationsByCursorRequest(
-            account_id=account_id,
-            from_=from_date,
-            to=to_date
+            account_id=account_id, from_=from_date, to=to_date
         )
 
         return await self.client.operations.get_operations_by_cursor(request)
@@ -81,7 +81,6 @@ class TinkoffClient:
         return await self.client.users.get_accounts()
 
     async def get_all_candles(self, **kwargs):
-
         async for candle in self.client.get_all_candles(**kwargs):
             yield candle
 
@@ -115,20 +114,21 @@ class TinkoffClient:
         """Get operations for a specific period with proper error handling"""
         try:
             return await self.get_operations(
-                account_id=account_id,
-                from_=start_date,
-                to=end_date
+                account_id=account_id, from_=start_date, to=end_date
             )
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(
-                f"Failed to get operations for period {start_date} to {end_date}: {e}")
+                f"Failed to get operations for period {start_date} to {end_date}: {e}"
+            )
             return None
 
     async def get_historical_data(self, account_id: str, days: int = 30):
         """Get historical operations data for the specified number of days"""
         import datetime
+
         end_date = datetime.datetime.now()
         start_date = end_date - datetime.timedelta(days=days)
 
@@ -145,38 +145,39 @@ class TinkoffClient:
         """
         # Handle both list of operations and response object
         operations = operations_response
-        if hasattr(operations_response, 'operations'):
+        if hasattr(operations_response, "operations"):
             operations = operations_response.operations
 
         if not operations:
             return {
-                'daily_data': {},
-                'summary': {
-                    'total_days': 0,
-                    'total_amount': 0,
-                    'total_buy': 0,
-                    'total_sell': 0,
-                    'total_commission': 0,
-                    'total_income': 0,
-                    'total_expense': 0,
-                    'total_other': 0,
-                    'total_trades': 0,
-                    'total_operations': 0,
-                    'net_profit': 0,
-                    'gross_profit': 0,
-                    'profit_margin': 0,
-                    'trade_volume': 0
+                "daily_data": {},
+                "summary": {
+                    "total_days": 0,
+                    "total_amount": 0,
+                    "total_buy": 0,
+                    "total_sell": 0,
+                    "total_commission": 0,
+                    "total_income": 0,
+                    "total_expense": 0,
+                    "total_other": 0,
+                    "total_trades": 0,
+                    "total_operations": 0,
+                    "net_profit": 0,
+                    "gross_profit": 0,
+                    "profit_margin": 0,
+                    "trade_volume": 0,
                 },
-                'table_format': {
-                    'total_profit': 0,
-                    'total_commission': 0,
-                    'total_trades': 0,
-                    'profit_percentage': 0,
-                    'daily_breakdown': {}
-                }
+                "table_format": {
+                    "total_profit": 0,
+                    "total_commission": 0,
+                    "total_trades": 0,
+                    "profit_percentage": 0,
+                    "daily_breakdown": {},
+                },
             }
 
         from app.utils.profit_calculator import ProfitCalculator
+
         calculator = ProfitCalculator()
 
         return calculator.get_fixed_profit_analysis(operations)
@@ -217,13 +218,17 @@ class TinkoffClient:
             starting_positions = current_positions.copy()
 
             # Process operations in reverse chronological order
-            operations = sorted(operations_response.operations,
-                                key=lambda x: x.date, reverse=True)
+            operations = sorted(
+                operations_response.operations, key=lambda x: x.date, reverse=True
+            )
 
-            from tinkoff.invest import OperationType
+            from t_tech.invest import OperationType
 
             for operation in operations:
-                if operation.operation_type in [OperationType.OPERATION_TYPE_BUY, OperationType.OPERATION_TYPE_SELL]:
+                if operation.operation_type in [
+                    OperationType.OPERATION_TYPE_BUY,
+                    OperationType.OPERATION_TYPE_SELL,
+                ]:
                     figi = operation.figi
                     quantity = operation.quantity
 
@@ -243,11 +248,14 @@ class TinkoffClient:
 
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Failed to calculate starting positions: {e}")
             return {}
 
-    async def get_profit_analysis_with_auto_positions(self, account_id: str, start_date, end_date):
+    async def get_profit_analysis_with_auto_positions(
+        self, account_id: str, start_date, end_date
+    ):
         """
         Get profit analysis with automatically calculated starting positions
 
@@ -261,36 +269,42 @@ class TinkoffClient:
         """
         try:
             # Calculate starting positions automatically
-            starting_positions = await self.calculate_starting_positions(account_id, start_date, end_date)
+            starting_positions = await self.calculate_starting_positions(
+                account_id, start_date, end_date
+            )
 
             # Get operations for the period
-            operations_response = await self.get_operations_for_period(account_id, start_date, end_date)
+            operations_response = await self.get_operations_for_period(
+                account_id, start_date, end_date
+            )
 
             if not operations_response or not operations_response.operations:
                 return [], 0.0, [], starting_positions
 
             # Use ProfitCalculator with starting positions
             from app.utils.profit_calculator import ProfitCalculator
+
             calculator = ProfitCalculator()
 
-            trades, total_profit, operations = calculator.process_operations_with_starting_positions(
-                operations_response.operations, starting_positions
+            trades, total_profit, operations = (
+                calculator.process_operations_with_starting_positions(
+                    operations_response.operations, starting_positions
+                )
             )
 
             return trades, total_profit, operations, starting_positions
 
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
-            logger.error(
-                f"Failed to get profit analysis with auto positions: {e}")
+            logger.error(f"Failed to get profit analysis with auto positions: {e}")
             return [], 0.0, [], {}
 
     def init_sync_client(self):
         """Initialize synchronous client"""
         if self.sync_client is None:
-            self.sync_client = Client(
-                token=self.token, app_name=settings.app_name)
+            self.sync_client = Client(token=self.token, app_name=settings.app_name)
         return self.sync_client
 
     def get_operations_sync(self, **kwargs):
@@ -313,8 +327,7 @@ class TinkoffClient:
         """
         try:
             # Get current positions
-            current_positions_response = self.get_positions_sync(
-                account_id=account_id)
+            current_positions_response = self.get_positions_sync(account_id=account_id)
             current_positions = {}
 
             if current_positions_response and current_positions_response.positions:
@@ -326,9 +339,7 @@ class TinkoffClient:
 
             # Get operations from start_date to end_date
             operations_response = self.get_operations_sync(
-                account_id=account_id,
-                from_=start_date,
-                to=end_date
+                account_id=account_id, from_=start_date, to=end_date
             )
 
             if not operations_response or not operations_response.operations:
@@ -338,13 +349,17 @@ class TinkoffClient:
             starting_positions = current_positions.copy()
 
             # Process operations in reverse chronological order
-            operations = sorted(operations_response.operations,
-                                key=lambda x: x.date, reverse=True)
+            operations = sorted(
+                operations_response.operations, key=lambda x: x.date, reverse=True
+            )
 
-            from tinkoff.invest import OperationType
+            from t_tech.invest import OperationType
 
             for operation in operations:
-                if operation.operation_type in [OperationType.OPERATION_TYPE_BUY, OperationType.OPERATION_TYPE_SELL]:
+                if operation.operation_type in [
+                    OperationType.OPERATION_TYPE_BUY,
+                    OperationType.OPERATION_TYPE_SELL,
+                ]:
                     figi = operation.figi
                     quantity = operation.quantity
 
@@ -364,24 +379,26 @@ class TinkoffClient:
 
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Failed to calculate starting positions: {e}")
             return {}
 
-    def get_profit_analysis_with_auto_positions_sync(self, account_id: str, start_date, end_date):
+    def get_profit_analysis_with_auto_positions_sync(
+        self, account_id: str, start_date, end_date
+    ):
         """
         Synchronous version of get_profit_analysis_with_auto_positions
         """
         try:
             # Calculate starting positions automatically
             starting_positions = self.calculate_starting_positions_sync(
-                account_id, start_date, end_date)
+                account_id, start_date, end_date
+            )
 
             # Get operations for the period
             operations_response = self.get_operations_sync(
-                account_id=account_id,
-                from_=start_date,
-                to=end_date
+                account_id=account_id, from_=start_date, to=end_date
             )
 
             if not operations_response or not operations_response.operations:
@@ -389,22 +406,27 @@ class TinkoffClient:
 
             # Use ProfitCalculator with starting positions
             from app.utils.profit_calculator import ProfitCalculator
+
             calculator = ProfitCalculator()
 
-            trades, total_profit, operations = calculator.process_operations_with_starting_positions(
-                operations_response.operations, starting_positions
+            trades, total_profit, operations = (
+                calculator.process_operations_with_starting_positions(
+                    operations_response.operations, starting_positions
+                )
             )
 
             return trades, total_profit, operations, starting_positions
 
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
-            logger.error(
-                f"Failed to get profit analysis with auto positions: {e}")
+            logger.error(f"Failed to get profit analysis with auto positions: {e}")
             return [], 0.0, [], {}
 
-    def get_profit_analysis_with_auto_detected_positions_sync(self, account_id: str, start_date, end_date):
+    def get_profit_analysis_with_auto_detected_positions_sync(
+        self, account_id: str, start_date, end_date
+    ):
         """
         Получает анализ прибыли с автоматическим определением начальных позиций
 
@@ -419,9 +441,7 @@ class TinkoffClient:
         try:
             # Получаем операции за период
             operations_response = self.get_operations_sync(
-                account_id=account_id,
-                from_=start_date,
-                to=end_date
+                account_id=account_id, from_=start_date, to=end_date
             )
 
             if not operations_response or not operations_response.operations:
@@ -429,22 +449,29 @@ class TinkoffClient:
 
             # Используем ProfitCalculator с автоматическим определением позиций
             from app.utils.profit_calculator import ProfitCalculator
+
             calculator = ProfitCalculator()
 
-            trades, total_profit, operations, starting_positions = calculator.process_operations_with_auto_positions(
-                operations_response.operations
+            trades, total_profit, operations, starting_positions = (
+                calculator.process_operations_with_auto_positions(
+                    operations_response.operations
+                )
             )
 
             return trades, total_profit, operations, starting_positions
 
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(
-                f"Failed to get profit analysis with auto-detected positions: {e}")
+                f"Failed to get profit analysis with auto-detected positions: {e}"
+            )
             return [], 0.0, [], {}
 
-    async def get_profit_analysis_with_auto_detected_positions(self, account_id: str, start_date, end_date):
+    async def get_profit_analysis_with_auto_detected_positions(
+        self, account_id: str, start_date, end_date
+    ):
         """
         Асинхронная версия get_profit_analysis_with_auto_detected_positions_sync
         """
@@ -459,22 +486,29 @@ class TinkoffClient:
 
             # Используем ProfitCalculator с автоматическим определением позиций
             from app.utils.profit_calculator import ProfitCalculator
+
             calculator = ProfitCalculator()
 
-            trades, total_profit, operations, starting_positions = calculator.process_operations_with_auto_positions(
-                operations_response.operations
+            trades, total_profit, operations, starting_positions = (
+                calculator.process_operations_with_auto_positions(
+                    operations_response.operations
+                )
             )
 
             return trades, total_profit, operations, starting_positions
 
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(
-                f"Failed to get profit analysis with auto-detected positions: {e}")
+                f"Failed to get profit analysis with auto-detected positions: {e}"
+            )
             return [], 0.0, [], {}
 
-    async def get_all_operations_by_cursor(self, account_id: str, target_date=None, batch_size: int = 1000):
+    async def get_all_operations_by_cursor(
+        self, account_id: str, target_date=None, batch_size: int = 1000
+    ):
         """
         Get all operations up to target_date using cursor pagination
 
@@ -490,8 +524,10 @@ class TinkoffClient:
             # Sandbox doesn't support getOperationsByCursor, fallback to regular method
             return await self.get_operations(account_id=account_id)
 
-        from tinkoff.invest.schemas import GetOperationsByCursorRequest
         import logging
+
+        from t_tech.invest.schemas import GetOperationsByCursorRequest
+
         logger = logging.getLogger(__name__)
 
         all_operations = []
@@ -501,8 +537,7 @@ class TinkoffClient:
             while True:
                 # Create request with cursor
                 request = GetOperationsByCursorRequest(
-                    account_id=account_id,
-                    limit=batch_size
+                    account_id=account_id, limit=batch_size
                 )
 
                 # Add cursor if we have one
@@ -510,7 +545,9 @@ class TinkoffClient:
                     request.cursor = cursor
 
                 # Get batch of operations
-                response = await self.client.operations.get_operations_by_cursor(request)
+                response = await self.client.operations.get_operations_by_cursor(
+                    request
+                )
 
                 if not response or not response.items:
                     logger.info("No more operations found")
@@ -525,16 +562,19 @@ class TinkoffClient:
                         # Normalize target_date timezone
                         if target_date.tzinfo is None:
                             import pytz
+
                             target_date = pytz.UTC.localize(target_date)
                         if item_date.tzinfo is None:
                             import pytz
+
                             item_date = pytz.UTC.localize(item_date)
 
                         # Check if we've reached the target date
                         if item_date <= target_date:
                             # We've reached operations before target_date, stop
                             logger.info(
-                                f"Reached target date {target_date}, stopping at operation date {item_date}")
+                                f"Reached target date {target_date}, stopping at operation date {item_date}"
+                            )
                             # Don't add this operation to the batch
                             continue
 
@@ -542,7 +582,8 @@ class TinkoffClient:
 
                 all_operations.extend(batch_operations)
                 logger.info(
-                    f"Retrieved {len(batch_operations)} operations in this batch, total: {len(all_operations)}")
+                    f"Retrieved {len(batch_operations)} operations in this batch, total: {len(all_operations)}"
+                )
 
                 # Check if we've reached target date or no more operations
                 if target_date:
@@ -552,6 +593,7 @@ class TinkoffClient:
                         item_date = item.date
                         if item_date.tzinfo is None:
                             import pytz
+
                             item_date = pytz.UTC.localize(item_date)
                         if item_date <= target_date:
                             reached_target = True
@@ -579,8 +621,14 @@ class TinkoffClient:
         logger.info(f"Total operations retrieved: {len(all_operations)}")
         return all_operations
 
-    async def get_operations_with_limit_offset(self, account_id: str, start_date=None, end_date=None,
-                                               limit: int = 1000, offset: int = 0):
+    async def get_operations_with_limit_offset(
+        self,
+        account_id: str,
+        start_date=None,
+        end_date=None,
+        limit: int = 1000,
+        offset: int = 0,
+    ):
         """
         Get operations using limit and offset for pagination
 
@@ -596,10 +644,14 @@ class TinkoffClient:
         """
         if self.sandbox:
             # Sandbox doesn't support getOperationsByCursor, fallback to regular method
-            return await self.get_operations(account_id=account_id, from_=start_date, to=end_date)
+            return await self.get_operations(
+                account_id=account_id, from_=start_date, to=end_date
+            )
 
-        from tinkoff.invest.schemas import GetOperationsByCursorRequest
         import logging
+
+        from t_tech.invest.schemas import GetOperationsByCursorRequest
+
         logger = logging.getLogger(__name__)
 
         try:
@@ -608,8 +660,7 @@ class TinkoffClient:
             # Ensure limit > 2 as per API recommendations
             safe_limit = max(limit, 3)
             request = GetOperationsByCursorRequest(
-                account_id=account_id,
-                limit=safe_limit
+                account_id=account_id, limit=safe_limit
             )
 
             # Add date filters if provided
@@ -625,20 +676,23 @@ class TinkoffClient:
                 logger.info("No operations found for the specified period")
                 return []
 
-            logger.info(
-                f"Retrieved {len(response.items)} operations (limit={limit})")
+            logger.info(f"Retrieved {len(response.items)} operations (limit={limit})")
             return response.items
 
         except Exception as e:
             logger.error(f"Error fetching operations with limit/offset: {e}")
             # Fallback to regular method
             logger.info("Falling back to regular get_operations method")
-            operations_response = await self.get_operations(account_id=account_id, from_=start_date, to=end_date)
-            if operations_response and hasattr(operations_response, 'operations'):
+            operations_response = await self.get_operations(
+                account_id=account_id, from_=start_date, to=end_date
+            )
+            if operations_response and hasattr(operations_response, "operations"):
                 return operations_response.operations
             return []
 
-    async def get_all_operations_for_period(self, account_id: str, start_date, end_date):
+    async def get_all_operations_for_period(
+        self, account_id: str, start_date, end_date
+    ):
         """
         Get all operations for a specific period using cursor pagination
 
@@ -651,6 +705,7 @@ class TinkoffClient:
             List of all operations for the period
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         all_operations = []
@@ -660,11 +715,10 @@ class TinkoffClient:
         try:
             while True:
                 # Create request with cursor
-                from tinkoff.invest.schemas import GetOperationsByCursorRequest
+                from t_tech.invest.schemas import GetOperationsByCursorRequest
 
                 request = GetOperationsByCursorRequest(
-                    account_id=account_id,
-                    limit=limit
+                    account_id=account_id, limit=limit
                 )
 
                 # Add cursor if we have one
@@ -678,7 +732,9 @@ class TinkoffClient:
                     request.to = end_date
 
                 # Get batch of operations
-                response = await self.client.operations.get_operations_by_cursor(request)
+                response = await self.client.operations.get_operations_by_cursor(
+                    request
+                )
 
                 if not response or not response.items:
                     logger.info("No more operations found")
@@ -696,7 +752,8 @@ class TinkoffClient:
 
                 all_operations.extend(filtered_operations)
                 logger.info(
-                    f"Retrieved {len(filtered_operations)} operations, total: {len(all_operations)}")
+                    f"Retrieved {len(filtered_operations)} operations, total: {len(all_operations)}"
+                )
 
                 # Check if we have more operations to fetch
                 if not response.has_next:
@@ -712,8 +769,10 @@ class TinkoffClient:
         except Exception as e:
             logger.error(f"Error fetching all operations for period: {e}")
             # Fallback to regular method
-            operations_response = await self.get_operations(account_id=account_id, from_=start_date, to=end_date)
-            if operations_response and hasattr(operations_response, 'operations'):
+            operations_response = await self.get_operations(
+                account_id=account_id, from_=start_date, to=end_date
+            )
+            if operations_response and hasattr(operations_response, "operations"):
                 return operations_response.operations
             return []
 
@@ -727,24 +786,23 @@ class TinkoffClient:
             return await self.client.sandbox.get_sandbox_operations(**kwargs)
 
         # getOperationsByCursor requires GetOperationsByCursorRequest object
-        from tinkoff.invest.schemas import GetOperationsByCursorRequest
+        from t_tech.invest.schemas import GetOperationsByCursorRequest
 
         # Extract parameters
-        account_id = kwargs.get('account_id', '')
-        from_date = kwargs.get('from_', None)
-        to_date = kwargs.get('to', None)
+        account_id = kwargs.get("account_id", "")
+        from_date = kwargs.get("from_", None)
+        to_date = kwargs.get("to", None)
 
         # Create request object
         request = GetOperationsByCursorRequest(
-            account_id=account_id,
-            from_=from_date,
-            to=to_date
+            account_id=account_id, from_=from_date, to=to_date
         )
 
         return await self.client.operations.get_operations_by_cursor(request)
 
-    async def get_enhanced_profit_analysis(self, account_id: str, start_date, end_date,
-                                           use_current_positions: bool = True) -> Dict[str, Any]:
+    async def get_enhanced_profit_analysis(
+        self, account_id: str, start_date, end_date, use_current_positions: bool = True
+    ) -> Dict[str, Any]:
         """
         Enhanced profit analysis with comprehensive position tracking and issue detection
 
@@ -766,10 +824,12 @@ class TinkoffClient:
             # Get current positions if requested
             current_positions = {}
             if use_current_positions:
-                current_positions_response = await self.get_positions(account_id=account_id)
+                current_positions_response = await self.get_positions(
+                    account_id=account_id
+                )
                 if current_positions_response:
                     # The positions response has 'securities' attribute
-                    if hasattr(current_positions_response, 'securities'):
+                    if hasattr(current_positions_response, "securities"):
                         for security in current_positions_response.securities:
                             figi = security.figi
                             # Use 'balance' attribute for securities
@@ -777,7 +837,7 @@ class TinkoffClient:
                             current_positions[figi] = quantity
 
                     # Also check for futures positions
-                    if hasattr(current_positions_response, 'futures'):
+                    if hasattr(current_positions_response, "futures"):
                         for future in current_positions_response.futures:
                             figi = future.figi
                             # Use 'balance' attribute for futures
@@ -785,70 +845,87 @@ class TinkoffClient:
                             current_positions[figi] = quantity
 
             # Get operations for the period
-            operations_response = await self.get_operations_for_period(account_id, start_date, end_date)
+            operations_response = await self.get_operations_for_period(
+                account_id, start_date, end_date
+            )
             if not operations_response or not operations_response.operations:
                 return {
-                    'trades': [],
-                    'total_profit': 0.0,
-                    'operations': [],
-                    'starting_positions': {},
-                    'analysis_report': {
-                        'summary': {'total_operations': 0, 'total_trades': 0},
-                        'data_quality': {'issues_found': 0, 'issues': []},
-                        'recommendations': ['No operations found for the specified period']
-                    }
+                    "trades": [],
+                    "total_profit": 0.0,
+                    "operations": [],
+                    "starting_positions": {},
+                    "analysis_report": {
+                        "summary": {"total_operations": 0, "total_trades": 0},
+                        "data_quality": {"issues_found": 0, "issues": []},
+                        "recommendations": [
+                            "No operations found for the specified period"
+                        ],
+                    },
                 }
 
             # Use enhanced profit calculator
             from app.utils.profit_calculator import ProfitCalculator
+
             calculator = ProfitCalculator()
 
-            trades, total_profit, operations, starting_positions, analysis_report = calculator.get_enhanced_profit_analysis(
-                operations_response.operations, current_positions if use_current_positions else None
+            trades, total_profit, operations, starting_positions, analysis_report = (
+                calculator.get_enhanced_profit_analysis(
+                    operations_response.operations,
+                    current_positions if use_current_positions else None,
+                )
             )
 
             # Additional analysis
             problematic_trades = calculator.detect_problematic_trades(trades)
             position_history = calculator.get_position_history(
-                operations_response.operations, starting_positions)
+                operations_response.operations, starting_positions
+            )
 
             # Validate position consistency
             validation_result = calculator.validate_position_consistency(
-                operations_response.operations, starting_positions, current_positions if use_current_positions else None
+                operations_response.operations,
+                starting_positions,
+                current_positions if use_current_positions else None,
             )
 
             return {
-                'trades': trades,
-                'total_profit': total_profit,
-                'operations': operations,
-                'starting_positions': starting_positions,
-                'current_positions': current_positions,
-                'analysis_report': analysis_report,
-                'problematic_trades': problematic_trades,
-                'position_history': position_history,
-                'validation_result': validation_result,
-                'method_used': 'current_positions' if use_current_positions else 'auto_detection'
+                "trades": trades,
+                "total_profit": total_profit,
+                "operations": operations,
+                "starting_positions": starting_positions,
+                "current_positions": current_positions,
+                "analysis_report": analysis_report,
+                "problematic_trades": problematic_trades,
+                "position_history": position_history,
+                "validation_result": validation_result,
+                "method_used": "current_positions"
+                if use_current_positions
+                else "auto_detection",
             }
 
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Failed to get enhanced profit analysis: {e}")
             return {
-                'error': str(e),
-                'trades': [],
-                'total_profit': 0.0,
-                'operations': [],
-                'starting_positions': {},
-                'analysis_report': {
-                    'summary': {'total_operations': 0, 'total_trades': 0},
-                    'data_quality': {'issues_found': 1, 'issues': [f'Error: {str(e)}']},
-                    'recommendations': ['Check your API credentials and account access']
-                }
+                "error": str(e),
+                "trades": [],
+                "total_profit": 0.0,
+                "operations": [],
+                "starting_positions": {},
+                "analysis_report": {
+                    "summary": {"total_operations": 0, "total_trades": 0},
+                    "data_quality": {"issues_found": 1, "issues": [f"Error: {str(e)}"]},
+                    "recommendations": [
+                        "Check your API credentials and account access"
+                    ],
+                },
             }
 
-    def get_enhanced_profit_analysis_sync(self, account_id: str, start_date, end_date,
-                                          use_current_positions: bool = True) -> Dict[str, Any]:
+    def get_enhanced_profit_analysis_sync(
+        self, account_id: str, start_date, end_date, use_current_positions: bool = True
+    ) -> Dict[str, Any]:
         """
         Synchronous version of get_enhanced_profit_analysis
         """
@@ -857,10 +934,11 @@ class TinkoffClient:
             current_positions = {}
             if use_current_positions:
                 current_positions_response = self.get_positions_sync(
-                    account_id=account_id)
+                    account_id=account_id
+                )
                 if current_positions_response:
                     # The positions response has 'securities' attribute
-                    if hasattr(current_positions_response, 'securities'):
+                    if hasattr(current_positions_response, "securities"):
                         for security in current_positions_response.securities:
                             figi = security.figi
                             # Use 'balance' attribute for securities
@@ -868,7 +946,7 @@ class TinkoffClient:
                             current_positions[figi] = quantity
 
                     # Also check for futures positions
-                    if hasattr(current_positions_response, 'futures'):
+                    if hasattr(current_positions_response, "futures"):
                         for future in current_positions_response.futures:
                             figi = future.figi
                             # Use 'balance' attribute for futures
@@ -877,73 +955,87 @@ class TinkoffClient:
 
             # Get operations for the period
             operations_response = self.get_operations_sync(
-                account_id=account_id,
-                from_=start_date,
-                to=end_date
+                account_id=account_id, from_=start_date, to=end_date
             )
 
             if not operations_response or not operations_response.operations:
                 return {
-                    'trades': [],
-                    'total_profit': 0.0,
-                    'operations': [],
-                    'starting_positions': {},
-                    'analysis_report': {
-                        'summary': {'total_operations': 0, 'total_trades': 0},
-                        'data_quality': {'issues_found': 0, 'issues': []},
-                        'recommendations': ['No operations found for the specified period']
-                    }
+                    "trades": [],
+                    "total_profit": 0.0,
+                    "operations": [],
+                    "starting_positions": {},
+                    "analysis_report": {
+                        "summary": {"total_operations": 0, "total_trades": 0},
+                        "data_quality": {"issues_found": 0, "issues": []},
+                        "recommendations": [
+                            "No operations found for the specified period"
+                        ],
+                    },
                 }
 
             # Use enhanced profit calculator
             from app.utils.profit_calculator import ProfitCalculator
+
             calculator = ProfitCalculator()
 
-            trades, total_profit, operations, starting_positions, analysis_report = calculator.get_enhanced_profit_analysis(
-                operations_response.operations, current_positions if use_current_positions else None
+            trades, total_profit, operations, starting_positions, analysis_report = (
+                calculator.get_enhanced_profit_analysis(
+                    operations_response.operations,
+                    current_positions if use_current_positions else None,
+                )
             )
 
             # Additional analysis
             problematic_trades = calculator.detect_problematic_trades(trades)
             position_history = calculator.get_position_history(
-                operations_response.operations, starting_positions)
+                operations_response.operations, starting_positions
+            )
 
             # Validate position consistency
             validation_result = calculator.validate_position_consistency(
-                operations_response.operations, starting_positions, current_positions if use_current_positions else None
+                operations_response.operations,
+                starting_positions,
+                current_positions if use_current_positions else None,
             )
 
             return {
-                'trades': trades,
-                'total_profit': total_profit,
-                'operations': operations,
-                'starting_positions': starting_positions,
-                'current_positions': current_positions,
-                'analysis_report': analysis_report,
-                'problematic_trades': problematic_trades,
-                'position_history': position_history,
-                'validation_result': validation_result,
-                'method_used': 'current_positions' if use_current_positions else 'auto_detection'
+                "trades": trades,
+                "total_profit": total_profit,
+                "operations": operations,
+                "starting_positions": starting_positions,
+                "current_positions": current_positions,
+                "analysis_report": analysis_report,
+                "problematic_trades": problematic_trades,
+                "position_history": position_history,
+                "validation_result": validation_result,
+                "method_used": "current_positions"
+                if use_current_positions
+                else "auto_detection",
             }
 
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Failed to get enhanced profit analysis: {e}")
             return {
-                'error': str(e),
-                'trades': [],
-                'total_profit': 0.0,
-                'operations': [],
-                'starting_positions': {},
-                'analysis_report': {
-                    'summary': {'total_operations': 0, 'total_trades': 0},
-                    'data_quality': {'issues_found': 1, 'issues': [f'Error: {str(e)}']},
-                    'recommendations': ['Check your API credentials and account access']
-                }
+                "error": str(e),
+                "trades": [],
+                "total_profit": 0.0,
+                "operations": [],
+                "starting_positions": {},
+                "analysis_report": {
+                    "summary": {"total_operations": 0, "total_trades": 0},
+                    "data_quality": {"issues_found": 1, "issues": [f"Error: {str(e)}"]},
+                    "recommendations": [
+                        "Check your API credentials and account access"
+                    ],
+                },
             }
 
-    async def diagnose_profit_calculation_issues(self, account_id: str, start_date, end_date) -> Dict[str, Any]:
+    async def diagnose_profit_calculation_issues(
+        self, account_id: str, start_date, end_date
+    ) -> Dict[str, Any]:
         """
         Diagnose profit calculation issues and provide recommendations
 
@@ -962,63 +1054,74 @@ class TinkoffClient:
             )
 
             # Get traditional analysis for comparison
-            traditional_analysis = await self.get_profit_analysis_with_auto_detected_positions(
-                account_id, start_date, end_date
+            traditional_analysis = (
+                await self.get_profit_analysis_with_auto_detected_positions(
+                    account_id, start_date, end_date
+                )
             )
 
             diagnosis = {
-                'comparison': {
-                    'enhanced_profit': enhanced_analysis['total_profit'],
+                "comparison": {
+                    "enhanced_profit": enhanced_analysis["total_profit"],
                     # total_profit from tuple
-                    'traditional_profit': traditional_analysis[1],
-                    'profit_difference': enhanced_analysis['total_profit'] - traditional_analysis[1],
-                    'trade_count_enhanced': len(enhanced_analysis['trades']),
+                    "traditional_profit": traditional_analysis[1],
+                    "profit_difference": enhanced_analysis["total_profit"]
+                    - traditional_analysis[1],
+                    "trade_count_enhanced": len(enhanced_analysis["trades"]),
                     # trades from tuple
-                    'trade_count_traditional': len(traditional_analysis[0])
+                    "trade_count_traditional": len(traditional_analysis[0]),
                 },
-                'issues_detected': enhanced_analysis['analysis_report']['data_quality']['issues'],
-                'problematic_trades': enhanced_analysis['problematic_trades'],
-                'validation_result': enhanced_analysis['validation_result'],
-                'recommendations': enhanced_analysis['analysis_report']['recommendations']
+                "issues_detected": enhanced_analysis["analysis_report"]["data_quality"][
+                    "issues"
+                ],
+                "problematic_trades": enhanced_analysis["problematic_trades"],
+                "validation_result": enhanced_analysis["validation_result"],
+                "recommendations": enhanced_analysis["analysis_report"][
+                    "recommendations"
+                ],
             }
 
             # Add severity assessment
-            severity = 'low'
-            if abs(diagnosis['comparison']['profit_difference']) > 10000:
-                severity = 'high'
-            elif abs(diagnosis['comparison']['profit_difference']) > 1000:
-                severity = 'medium'
+            severity = "low"
+            if abs(diagnosis["comparison"]["profit_difference"]) > 10000:
+                severity = "high"
+            elif abs(diagnosis["comparison"]["profit_difference"]) > 1000:
+                severity = "medium"
 
-            diagnosis['severity'] = severity
+            diagnosis["severity"] = severity
 
             # Add specific recommendations based on diagnosis
             specific_recommendations = []
 
-            if diagnosis['comparison']['profit_difference'] < -10000:
+            if diagnosis["comparison"]["profit_difference"] < -10000:
                 specific_recommendations.append(
-                    "Large negative difference detected - likely missing starting position data")
+                    "Large negative difference detected - likely missing starting position data"
+                )
 
-            if len(diagnosis['problematic_trades']) > 0:
+            if len(diagnosis["problematic_trades"]) > 0:
                 specific_recommendations.append(
-                    f"Found {len(diagnosis['problematic_trades'])} problematic trades")
+                    f"Found {len(diagnosis['problematic_trades'])} problematic trades"
+                )
 
-            if not diagnosis['validation_result']['valid']:
+            if not diagnosis["validation_result"]["valid"]:
                 specific_recommendations.append(
-                    "Position validation failed - check operation data consistency")
+                    "Position validation failed - check operation data consistency"
+                )
 
-            diagnosis['specific_recommendations'] = specific_recommendations
+            diagnosis["specific_recommendations"] = specific_recommendations
 
             return diagnosis
 
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Failed to diagnose profit calculation issues: {e}")
             return {
-                'error': str(e),
-                'severity': 'unknown',
-                'recommendations': ['Unable to perform diagnosis due to error']
+                "error": str(e),
+                "severity": "unknown",
+                "recommendations": ["Unable to perform diagnosis due to error"],
             }
 
 
-client = TinkoffClient(token=settings.token, sandbox=settings.sandbox)
+client = t_techClient(token=settings.token, sandbox=settings.sandbox)

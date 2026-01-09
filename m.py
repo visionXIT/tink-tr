@@ -1,6 +1,6 @@
 from grpc import StatusCode
 from pydantic import BaseSettings
-from tinkoff.invest import Client, RequestError, AccountType
+from t_tech.invest import AccountType, Client, RequestError
 
 
 class Settings(BaseSettings):
@@ -33,4 +33,6 @@ def get_accounts():
 if __name__ == "__main__":
     accounts = get_accounts()
     for account in accounts:
-        print(f"id: {account.id}, name: {account.name}, type: {str(AccountType(account.type))}")
+        print(
+            f"id: {account.id}, name: {account.name}, type: {str(AccountType(account.type))}"
+        )
