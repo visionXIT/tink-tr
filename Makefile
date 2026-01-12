@@ -6,6 +6,7 @@ dev:
 	uvicorn app.main:app --reload
 acc:
 	@git pull
+	@source venv/bin/activate
 	@python m.py
 run:
 	@echo "Запуск бота..."
