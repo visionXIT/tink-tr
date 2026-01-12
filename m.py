@@ -50,7 +50,7 @@ def update_env_file(key: str, value: str):
             new_lines.append(line)
 
     if not key_found:
-        new_lines.append(f"{key}={value}\n")
+        new_lines.append(f"\n{key}={value}\n")
 
     with open(env_path, "w") as f:
         f.writelines(new_lines)
@@ -65,7 +65,7 @@ if __name__ == "__main__":
         print(f"  [Номер {idx + 1}] {acc.name} (id: {acc.id})")
 
     print("\nВведите номер аккаунта:")
-    choice = int(input())
+    choice = int(input()) - 1
 
     if choice < 0 or choice >= len(broker_accounts):
         print("Неверный номер!")
