@@ -1,13 +1,11 @@
 start:
 	@git pull
-	@source venv/bin/activate
-	@uvicorn app.main:app --port 80 --host 0.0.0.0
+	@./venv/bin/uvicorn app.main:app --port 80 --host 0.0.0.0
 dev:
-	uvicorn app.main:app --reload
+	./venv/bin/uvicorn app.main:app --reload
 acc:
 	@git pull
-	@source venv/bin/activate
-	@python m.py
+	@./venv/bin/python m.py
 run:
 	@echo "Запуск бота..."
 	@killall screen || true
