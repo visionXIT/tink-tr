@@ -3,4 +3,11 @@ start:
 dev:
 	uvicorn app.main:app --reload
 acc:
-	python m.py
+	@git pull
+	@python m.py
+run:
+	@echo "Запуск бота..."
+	@killall screen || true
+	@cd ~/tink-tr && git pull
+	@screen -dmS tink-tr bash -c "cd ~/tink-tr && source venv/bin/activate && make start"
+	@echo "Бот запущен"
