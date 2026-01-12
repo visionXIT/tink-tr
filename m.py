@@ -1,13 +1,14 @@
 from grpc import StatusCode
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from t_tech.invest import AccountType, Client, RequestError
 
 
 class Settings(BaseSettings):
     token: str
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(
+        env_file=".env", extra="ignore", case_sensitive=False
+    )
 
 
 settings = Settings()

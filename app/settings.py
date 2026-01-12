@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv(".env")
 
@@ -11,8 +11,9 @@ class Settings(BaseSettings):
     password: str = "2"
     sandbox: bool = False
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(
+        env_file=".env", extra="ignore", case_sensitive=False
+    )
 
 
 settings = Settings()
