@@ -1,5 +1,3 @@
-start:
-	echo "Запуск бота..."
 dev:
 	./venv/bin/uvicorn app.main:app --reload
 acc:
