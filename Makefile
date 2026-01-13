@@ -1,7 +1,5 @@
 dev:
 	./venv/bin/uvicorn app.main:app --reload
-start:
-	@echo "Запуск бота..."
 update:
 	@cd ~/tink-tr && git pull && rm -f ~/Makefile && ln -s ~/tink-tr/Makefile ~/Makefile
 acc:
