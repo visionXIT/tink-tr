@@ -1,5 +1,8 @@
 dev:
 	./venv/bin/uvicorn app.main:app --reload
+update:
+  @cd ~/tink-tr && git pull
+	@ln -s ~/tink-tr/Makefile ~/Makefile
 acc:
 	@cd ~/tink-tr && git pull
 	@cd ~/tink-tr && ./venv/bin/python m.py
