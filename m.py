@@ -1,34 +1,34 @@
 from grpc import StatusCode
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from t_tech.invest import Client, RequestError
 
 
-class Settings(BaseSettings):
-    token: str
-
-    model_config = SettingsConfigDict(
-        env_file=".env", extra="ignore", case_sensitive=False
-    )
-
-
-settings = Settings()
-
-
-def get_sandbox_accounts():
-    with Client(settings.token) as client:
+def get_sandbox_accounts(token: str):
+    with Client(token) as client:
         sb_accounts = client.sandbox.get_sandbox_accounts().accounts
         if len(sb_accounts) == 0:
             client.sandbox.open_sandbox_account()
         return client.sandbox.get_sandbox_accounts().accounts
 
 
-def get_accounts():
-    with Client(settings.token) as client:
+def get_accounts(token: str):
+    with Client(token) as client:
         try:
             return client.users.get_accounts().accounts
         except RequestError as e:
             if e.code == StatusCode.UNAUTHENTICATED:
-                return get_sandbox_accounts()
+                return get_sandbox_accounts(token)
+
+
+def get_env_value(key: str) -> str | None:
+    env_path = ".env"
+    try:
+        with open(env_path, "r") as f:
+            for line in f:
+                if line.strip().upper().startswith(f"{key.upper()}="):
+                    return line.strip().split("=", 1)[1]
+    except FileNotFoundError:
+        pass
+    return None
 
 
 def update_env_file(key: str, value: str):
@@ -43,21 +43,33 @@ def update_env_file(key: str, value: str):
 
     new_lines = []
     for line in lines:
-        if line.strip().startswith(f"{key}="):
+        if line.strip().upper().startswith(f"{key.upper()}="):
             new_lines.append(f"{key}={value}\n")
             key_found = True
         else:
             new_lines.append(line)
 
     if not key_found:
-        new_lines.append(f"\n{key}={value}\n")
+        if lines and lines[-1][-1] != "\n":
+            new_lines.append("\n")
+        new_lines.append(f"{key}={value}\n")
 
     with open(env_path, "w") as f:
         f.writelines(new_lines)
 
 
 if __name__ == "__main__":
-    accounts = get_accounts()
+    token = get_env_value("TOKEN")
+    if not token:
+        print("\nВведите токен Тинькофф:")
+        token = input().strip()
+        if not token:
+            print("Токен не может быть пустым!")
+            exit(1)
+        update_env_file("TOKEN", token)
+        print("Токен сохранен")
+
+    accounts = get_accounts(token)
     broker_accounts = [(i, acc) for i, acc in enumerate(accounts) if acc.type == 1]
 
     print("\nДоступные брокерские счета ( номер, название ):")
