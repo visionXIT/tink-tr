@@ -20,11 +20,12 @@ pydantic-settings==2.11.0
 pydantic_core==2.41.5
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
+python-multipart==0.0.21
 pytz==2025.2
 sentry-sdk==2.50.0
 six==1.17.0
 starlette==0.49.3
-t-tech-investments @ file:///tmp/t_tech_investments-0.3.3-py3-none-any.whl
+t-tech-investments @ file:///tmp/t_tech_investments-0.3.3-py3-none-any.whl#sha256=cdcce4e608d43e63b8dd73765dc831cb1022f64eb7ea7e8e53968b1b280aafcd
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 tzlocal==5.3.1
